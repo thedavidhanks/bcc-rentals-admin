@@ -135,6 +135,19 @@ These gate specific phases. Surface them to the human; do not guess.
 |---|---|---|---|---|
 | P7.1 | Create a block/reservation in admin → confirm storefront availability reflects it within ~30s and won't double-book that window. | main | P6.1 | TODO |
 
+### P9 — Shared code consolidation (with storefront)
+Per the human's direction (Q1): common functions must live in a **shared/common area**
+consumed by both storefront and admin, not duplicated. Do this once the storefront repo
+address is provided; until then, code written in P2/P3 that mirrors storefront logic is
+tagged `// TODO(P9): consolidate` so it's easy to find and hoist.
+
+| ID | Task | Owner | Depends | Status |
+|---|---|---|---|---|
+| P9.1 | Obtain storefront repo (address from human); decide the shared-code mechanism (e.g. workspaces monorepo package `@bcc/scheduler`, git submodule, or published internal pkg). | main | Q1 addr | BLOCKED (need repo address) |
+| P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | TODO |
+| P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites. | code-writer | P9.2 | TODO |
+| P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers). | code-writer | P9.3 | TODO |
+
 ### P8 — Deployment
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
@@ -159,5 +172,10 @@ and its tests can also proceed in parallel.
 
 - 2026-07-20 — Plan created from ADMIN_APP_SPEC.md. Confirmed fresh scaffold, no git,
   storefront source not present locally (Q1), env files are storefront-inherited.
+- 2026-07-20 — P0.1 done (git init + .gitignore, .env.local confirmed ignored). Foundation
+  wave (P0.2, P0.3, P1.1–P1.4) handed to code-writer agent (background).
+- 2026-07-20 — Q1 answered: human will provide storefront repo address; consolidate common
+  code into a shared area rather than duplicating → added phase P9. Reimplemented-from-spec
+  code to carry `// TODO(P9): consolidate` markers.
 </content>
 </invoke>
