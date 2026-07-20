@@ -68,14 +68,15 @@ is unchanged by anything here.
 
 ## Commands
 
-_(Populated once the app is scaffolded — P0.2. Expected:)_
-
 ```bash
+npm install            # first, in a fresh checkout (node_modules is not committed)
 npm run dev            # local dev server
 npm run build          # standalone production build
 npm run lint           # eslint
-npm test               # unit/integration tests
-node scripts/db/apply-schema.mjs   # apply db/schema.sql (DEV BRANCH first; never prod without go-ahead)
+npm run typecheck      # tsc --noEmit
+npm test               # vitest run
+npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); refuses
+                       # prod unless APPLY_TO_PROD=1. Never run against prod without go-ahead.
 ```
 
 ## Safety rails
@@ -93,6 +94,13 @@ node scripts/db/apply-schema.mjs   # apply db/schema.sql (DEV BRANCH first; neve
   (branch → test-engineer → merge), `test-engineer`, `code-improvement-advisor`,
   `graphic-designer`. Reserve `main` for decisions, wiring, and anything touching the
   shared production DB or deployment.
+- **Agent model gotcha:** `code-writer` and `test-engineer` are pinned to
+  `claude-sonnet-4-5`, which is NOT enabled on this Vertex deployment — launching them
+  as-is fails immediately. Pass `model: opus` (or another available model) in the Agent
+  call.
+- **`git merge` needs human approval** here (the permission guard denies it). Agents
+  build/verify on a branch and stop; a human runs the merge, then a session marks the
+  tasks DONE in the plan.
 - Keep [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) current: update task status and
   add a dated Progress-log line when work lands. Resume from the first non-`DONE` phase.
 

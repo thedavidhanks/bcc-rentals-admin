@@ -31,14 +31,33 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ## Current state (as of 2026-07-20)
 
-- Repo contains only `docs/`, `.claude/` (settings + 4 custom agents), `.devcontainer/`,
-  `.env.local`, `.env.local.example`. No app code, no `package.json`, no git repo.
-- `.env.local` / `.env.local.example` are **inherited from the storefront** (PayPal,
-  Resend, Upstash, Neon) and must be reshaped to the admin var set (§11).
+**Foundation is built, verified, and merged to `master`** (merge commit `7707a88`).
+Working tree clean. A new session can `npm install && npm run build` and it passes.
+
+Present in the repo now:
+- **App scaffold:** Next.js (App Router) + TypeScript, `next.config.ts` with
+  `output: 'standalone'`, strict TS, ESLint, `vitest`. `package.json` scripts: `dev`,
+  `build`, `start`, `lint`, `typecheck`, `test`, `db:apply`. Placeholder `app/page.tsx`.
+- **Container:** `Dockerfile` (multi-stage standalone, port 8080, non-root) + `.dockerignore`.
+- **Data layer:** `lib/db.ts` (`getPool()` + `withTransaction()`, `server-only`).
+- **Config:** `lib/env.ts` (server Zod env, fail-fast) + `lib/public-env.ts` (client-safe
+  `NEXT_PUBLIC_*`). `.env.local.example` reshaped to the §11 admin var set (no PayPal/
+  Resend/Upstash).
+- **Schema:** `db/schema.sql` (idempotent §5 DDL) + `scripts/db/apply-schema.mjs`
+  (dev-branch-first, refuses prod unless `APPLY_TO_PROD=1`). **NOT yet applied to any DB.**
+- **Tests:** `tests/env.test.ts` (3 passing).
+- Git initialized; `.env.local` (live prod secrets) is git-ignored.
+
+Still storefront-inherited / needs work later:
 - [DEPLOY_CLOUD_RUN.md](./DEPLOY_CLOUD_RUN.md) is the **storefront's** runbook (PayPal
-  build args, storefront domain). It must be adapted for the admin app (Firebase build
-  vars, `admin.bachmancc.org`, no PayPal) — tracked as `P8.1`.
-- Toolchain: Node v22.16, npm 10.9. Target: Next.js (App Router) + TypeScript, `pg`.
+  build args, storefront domain). Adapt for admin (Firebase build vars,
+  `admin.bachmancc.org`, no PayPal) — tracked as `P8.1`.
+- Toolchain: Node v22.16, npm 10.9.
+
+Reconcile-later flags (from building without the storefront source — see P9):
+- `lib/db.ts` SSL uses `{ rejectUnauthorized: false }` for Neon — confirm vs storefront.
+- `lib/env.ts` + `lib/public-env.ts` split is our interpretation, not a copy.
+- `withTransaction` shape follows spec prose, not the real `lib/scheduler/db.ts`.
 
 ---
 
@@ -78,16 +97,16 @@ These gate specific phases. Surface them to the human; do not guess.
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
 | P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main | — | DONE |
-| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | VERIFIED — MERGE PENDING |
-| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | VERIFIED — MERGE PENDING |
+| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | DONE (`7707a88`) |
+| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | DONE (`7707a88`) |
 
 ### P1 — Data layer & config
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`. | code-writer | P0.2 | VERIFIED — MERGE PENDING (`// TODO(P9)`: reconcile SSL + shape vs storefront) |
-| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | VERIFIED — MERGE PENDING (split: `lib/env.ts` server + `lib/public-env.ts` client) |
-| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | VERIFIED — MERGE PENDING |
-| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | VERIFIED — MERGE PENDING (apply refuses prod unless `APPLY_TO_PROD=1`) |
+| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`. | code-writer | P0.2 | DONE (`7707a88`; `TODO(P9)`: reconcile SSL + shape vs storefront) |
+| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | DONE (`7707a88`; split: `lib/env.ts` server + `lib/public-env.ts` client) |
+| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | DONE (`7707a88`) |
+| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | DONE (`7707a88`; apply refuses prod unless `APPLY_TO_PROD=1`) |
 | P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes. | main | P1.4, Q5 | BLOCKED (Q5) |
 
 ### P2 — Reservation engine (race-safe core)
@@ -159,12 +178,38 @@ tagged `// TODO(P9): consolidate` so it's easy to find and hoist.
 
 ---
 
-## Recommended first delegation wave (unblocked now)
+## ▶ Next session — start here
 
-`P0.2, P0.3, P1.1, P1.2, P1.3, P1.4` — scaffold + config + data layer + `schema.sql`
-file. None need the open questions resolved; all are well-specified. Hand to
-`code-writer` after `P0.1` (git init). `P2.4` (recurrence expansion, pure function)
-and its tests can also proceed in parallel.
+Context: P0–P1 foundation is DONE and merged (`7707a88`). Pick up here.
+
+**First: housekeeping (30 seconds)**
+- `npm install` (deps are in `package.json`/lock but `node_modules` isn't committed).
+- Untracked `.claude/agents/general-worker.md` exists — commit or ignore, your call.
+
+**Delegate this wave now (unblocked, no open questions needed):**
+| Task | What | Owner |
+|---|---|---|
+| P2.4 | Recurrence expansion — pure function, rule → Eastern occurrence dates, cap + truncation signal. Easiest clean win; fully specified. | code-writer |
+| P3.1 | Typed repositories for all eight tables (read/write against the schema). | code-writer |
+| P3.2 | `admin_audit_log` writer (depends on P3.1). | code-writer |
+| P2.5 (partial) | Tests for P2.4 recurrence expansion (DST edges). | test-engineer |
+
+These can run as **parallel `code-writer` agents** (P2.4 and P3.1 touch different files).
+Give each the same guardrails: no DDL, no deploy, don't touch `.env.local`, tag any
+storefront-mirrored logic `// TODO(P9): consolidate`. **Model note:** the `code-writer`
+and `test-engineer` agents are pinned to a Vertex model that is NOT enabled here
+(`claude-sonnet-4-5`) — pass `model: opus` (or another available model) when launching, or
+they fail immediately.
+
+**Reservation engine core (P2.1–P2.3)** is best done *after* the storefront repo address
+arrives (Q1) so we copy the proven race-safe write instead of reimplementing. If it hasn't
+arrived and you want to proceed, reimplement from spec §8 and tag `// TODO(P9)`.
+
+**Blocked until the human provides answers** (see open-questions table): P1.5 (Q5), all of
+P4 (Q2/Q3), P8 deploy (Q4), P9 consolidation (storefront repo address).
+
+**Merge protocol reminder:** `git merge` requires human approval in this environment —
+code-writer will build/verify on a branch and stop before merging; a human runs the merge.
 
 ---
 
@@ -183,5 +228,9 @@ and its tests can also proceed in parallel.
   (`git merge` denied) — needs human approval. Notes: `next`/`vitest` bumped for CVEs;
   env split into server (`lib/env.ts`) + client (`lib/public-env.ts`). Reconcile SSL config
   and `withTransaction` shape against storefront under P9.
+- 2026-07-20 — Human merged the foundation branch → `master` (merge commit `7707a88`).
+  P0.2–P1.4 now DONE; tree clean. Next wave = P2.4, P3.1, P3.2 (+ P2.4 tests), delegatable
+  in parallel to `code-writer`/`test-engineer` (must pass `model: opus` — pinned model
+  unavailable here). See "▶ Next session — start here". P2.1–P2.3 wait on Q1 repo address.
 </content>
 </invoke>
