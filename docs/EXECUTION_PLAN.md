@@ -78,16 +78,16 @@ These gate specific phases. Surface them to the human; do not guess.
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
 | P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main | — | DONE |
-| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | IN PROGRESS |
-| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | IN PROGRESS |
+| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | VERIFIED — MERGE PENDING |
+| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | VERIFIED — MERGE PENDING |
 
 ### P1 — Data layer & config
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`. | code-writer | P0.2 | TODO |
-| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | TODO |
-| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | TODO |
-| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | TODO |
+| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`. | code-writer | P0.2 | VERIFIED — MERGE PENDING (`// TODO(P9)`: reconcile SSL + shape vs storefront) |
+| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | VERIFIED — MERGE PENDING (split: `lib/env.ts` server + `lib/public-env.ts` client) |
+| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | VERIFIED — MERGE PENDING |
+| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | VERIFIED — MERGE PENDING (apply refuses prod unless `APPLY_TO_PROD=1`) |
 | P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes. | main | P1.4, Q5 | BLOCKED (Q5) |
 
 ### P2 — Reservation engine (race-safe core)
@@ -177,5 +177,11 @@ and its tests can also proceed in parallel.
 - 2026-07-20 — Q1 answered: human will provide storefront repo address; consolidate common
   code into a shared area rather than duplicating → added phase P9. Reimplemented-from-spec
   code to carry `// TODO(P9): consolidate` markers.
+- 2026-07-20 — Foundation wave (P0.2, P0.3, P1.1–P1.4) built + verified GREEN by code-writer
+  on branch `code-writer/foundation-scaffold` (commit `555674c`): `lint`, `typecheck`,
+  `vitest` (3/3), `build` all pass. **Merge into `master` is blocked by a permission guard**
+  (`git merge` denied) — needs human approval. Notes: `next`/`vitest` bumped for CVEs;
+  env split into server (`lib/env.ts`) + client (`lib/public-env.ts`). Reconcile SSL config
+  and `withTransaction` shape against storefront under P9.
 </content>
 </invoke>
