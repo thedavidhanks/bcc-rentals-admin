@@ -1,0 +1,31 @@
+{
+  "gcpAuthRefresh": "gcloud auth application-default login",
+  "env": {
+    "CLAUDE_CODE_USE_VERTEX": "1",
+    "ANTHROPIC_VERTEX_PROJECT_ID": "rice-tti-pocs",
+    "CLOUD_ML_REGION": "global",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-8"
+  },
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/dave_/workspace/**)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Read(//home/node/.npm/_logs/**)",
+      "WebFetch(domain:aws.amazon.com)",
+      "WebFetch(domain:support.google.com)",
+      "WebFetch(domain:knowledge.workspace.google.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(echo:*)",
+      "Bash(read:*)",
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run test:*)",
+      "mcp__duckduckgo__web-search"
+    ],
+    "deny": ["WebSearch", "Bash(git merge:*)"]
+  },
+  "model": "opus"
+}
