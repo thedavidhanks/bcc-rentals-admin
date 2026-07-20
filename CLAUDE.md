@@ -104,12 +104,15 @@ npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); r
 - Keep [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) current: update task status and
   add a dated Progress-log line when work lands. Resume from the first non-`DONE` phase.
 
-## Storefront reference files (per spec — NOT present in this repo)
+## Storefront reference files (per spec — repo now available, not vendored here)
 
 The spec cites `lib/scheduler/{db,client,policy}.ts`, `lib/products/{types,repository}.ts`,
 `lib/env.ts`, `scripts/db/apply-schema.mjs`, `docs/DEPLOY_CLOUD_RUN.md` from the storefront.
-Only the docs are here. If the storefront repo becomes available, **copy** the scheduler
-module rather than reimplementing (spec §8: "Copying is safer than reimplementing").
-Otherwise reimplement the race-safe write + policy from the spec's pseudocode and flag for
-later reconciliation (open question Q1 in the execution plan).
+
+**Storefront repo:** https://github.com/thedavidhanks/bcc-rentals-frontend (public,
+default branch `main`). It is not vendored into this repo. **Copy** the scheduler module
+from there rather than reimplementing (spec §8: "Copying is safer than reimplementing"),
+and reconcile any spec-pseudocode reimplementations against it. The shared-code
+consolidation (execution-plan phase P9) is the durable home for this common surface —
+prefer consolidating over duplicating. Q1 is now answered.
 </content>

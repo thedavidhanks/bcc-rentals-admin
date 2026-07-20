@@ -67,7 +67,7 @@ These gate specific phases. Surface them to the human; do not guess.
 
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
-| Q1 | ✅ **ANSWERED.** Storefront repo **address will be provided** by the human. Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Copy verbatim in the interim if consolidation lags. | P2, P5, P6 (quality) | Awaiting repo address; until then use spec pseudocode and mark for consolidation. |
+| Q1 | ✅ **ANSWERED + repo now provided:** https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
 | Q2 | **Firebase / Identity Platform project details**: project id, Web SDK config keys, and which social providers to enable (Google/GitHub/Facebook/Apple). Each needs its own OAuth app. | P4 | Cannot complete auth; stub a dev-only bypass gated behind `NODE_ENV !== 'production'` so other phases proceed. |
 | Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
 | Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. | P8 | Deploy phase stays BLOCKED. |
@@ -156,13 +156,14 @@ These gate specific phases. Surface them to the human; do not guess.
 
 ### P9 — Shared code consolidation (with storefront)
 Per the human's direction (Q1): common functions must live in a **shared/common area**
-consumed by both storefront and admin, not duplicated. Do this once the storefront repo
-address is provided; until then, code written in P2/P3 that mirrors storefront logic is
-tagged `// TODO(P9): consolidate` so it's easy to find and hoist.
+consumed by both storefront and admin, not duplicated. **The storefront repo is now
+available** (https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`), so
+this phase is unblocked. Code written in P2/P3 that mirrors storefront logic is tagged
+`// TODO(P9): consolidate` so it's easy to find and hoist.
 
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P9.1 | Obtain storefront repo (address from human); decide the shared-code mechanism (e.g. workspaces monorepo package `@bcc/scheduler`, git submodule, or published internal pkg). | main | Q1 addr | BLOCKED (need repo address) |
+| P9.1 | ~~Obtain storefront repo (address from human)~~ — **repo provided: https://github.com/thedavidhanks/bcc-rentals-frontend** (public, `main`). Remaining: decide the shared-code mechanism (e.g. workspaces monorepo package `@bcc/scheduler`, git submodule, or published internal pkg). | main | Q1 addr | TODO (unblocked — repo in hand; pick mechanism) |
 | P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | TODO |
 | P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites. | code-writer | P9.2 | TODO |
 | P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers). | code-writer | P9.3 | TODO |
@@ -201,12 +202,17 @@ and `test-engineer` agents are pinned to a Vertex model that is NOT enabled here
 (`claude-sonnet-4-5`) — pass `model: opus` (or another available model) when launching, or
 they fail immediately.
 
-**Reservation engine core (P2.1–P2.3)** is best done *after* the storefront repo address
-arrives (Q1) so we copy the proven race-safe write instead of reimplementing. If it hasn't
-arrived and you want to proceed, reimplement from spec §8 and tag `// TODO(P9)`.
+**Reservation engine core (P2.1–P2.3) is now unblocked** — the storefront repo has arrived
+(https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`). **Copy** the proven
+race-safe write + policy (`lib/scheduler/{db,client,policy}.ts`) from the storefront rather
+than reimplementing from spec §8 (spec: "Copying is safer than reimplementing"). Where you
+must adapt, tag `// TODO(P9): consolidate` so the shared-code phase can hoist it.
 
-**Blocked until the human provides answers** (see open-questions table): P1.5 (Q5), all of
-P4 (Q2/Q3), P8 deploy (Q4), P9 consolidation (storefront repo address).
+**Also now actionable:** P9.1 (repo in hand — decide the shared-code mechanism), which in
+turn opens the rest of P9.
+
+**Still blocked until the human provides answers** (see open-questions table): P1.5 (Q5),
+all of P4 (Q2/Q3), P8 deploy (Q4).
 
 **Merge protocol reminder:** `git merge` requires human approval in this environment —
 code-writer will build/verify on a branch and stop before merging; a human runs the merge.
@@ -232,5 +238,11 @@ code-writer will build/verify on a branch and stop before merging; a human runs 
   P0.2–P1.4 now DONE; tree clean. Next wave = P2.4, P3.1, P3.2 (+ P2.4 tests), delegatable
   in parallel to `code-writer`/`test-engineer` (must pass `model: opus` — pinned model
   unavailable here). See "▶ Next session — start here". P2.1–P2.3 wait on Q1 repo address.
+- 2026-07-20 — **Storefront repo address provided:** https://github.com/thedavidhanks/bcc-rentals-frontend
+  (verified reachable via `git ls-remote`; public, default branch `main`). Q1 fully resolved.
+  Unblocks P2.1–P2.3 (copy race-safe write + policy from the storefront instead of
+  reimplementing from spec) and P9.1 (repo in hand — next step is choosing the shared-code
+  mechanism). Updated Q1 row, P9.1, the P9 intro, the "Next session" guidance, and CLAUDE.md's
+  storefront-reference section accordingly. Repo is *not* vendored into this repo — copy/consolidate.
 </content>
 </invoke>
