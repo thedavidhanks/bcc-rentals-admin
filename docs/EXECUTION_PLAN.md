@@ -48,7 +48,7 @@ These gate specific phases. Surface them to the human; do not guess.
 
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
-| Q1 | **Is the storefront repo (`bcc-rentals-frontend`) available** to copy `lib/scheduler/*`, `lib/products/*`, `lib/env.ts` from? Copying is safer than reimplementing (spec §8). | P2, P5, P6 (quality) | Reimplement the race-safe write + policy from the spec's pseudocode; flag for later reconciliation. |
+| Q1 | ✅ **ANSWERED.** Storefront repo **address will be provided** by the human. Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Copy verbatim in the interim if consolidation lags. | P2, P5, P6 (quality) | Awaiting repo address; until then use spec pseudocode and mark for consolidation. |
 | Q2 | **Firebase / Identity Platform project details**: project id, Web SDK config keys, and which social providers to enable (Google/GitHub/Facebook/Apple). Each needs its own OAuth app. | P4 | Cannot complete auth; stub a dev-only bypass gated behind `NODE_ENV !== 'production'` so other phases proceed. |
 | Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
 | Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. | P8 | Deploy phase stays BLOCKED. |
@@ -77,9 +77,9 @@ These gate specific phases. Surface them to the human; do not guess.
 ### P0 — Repo & tooling foundation
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main | — | TODO |
-| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | TODO |
-| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | TODO |
+| P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main | — | DONE |
+| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | IN PROGRESS |
+| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | IN PROGRESS |
 
 ### P1 — Data layer & config
 | ID | Task | Owner | Depends | Status |
