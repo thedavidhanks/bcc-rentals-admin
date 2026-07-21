@@ -71,7 +71,7 @@ These gate specific phases. Surface them to the human; do not guess.
 | Q2 | **Firebase / Identity Platform project details**: project id, Web SDK config keys, and which social providers to enable (Google/GitHub/Facebook/Apple). Each needs its own OAuth app. | P4 | Cannot complete auth; stub a dev-only bypass gated behind `NODE_ENV !== 'production'` so other phases proceed. |
 | Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
 | Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. | P8 | Deploy phase stays BLOCKED. |
-| Q5 | **Confirm targeting the same Neon DB, dev branch first.** `DATABASE_URL_DEV` in `.env.local` — is it safe to apply DDL there? | P1.4 (apply) | Write `schema.sql` as a file only; do **not** apply until confirmed. |
+| Q5 | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4. | P1.4 (apply) | ~~Write `schema.sql` as a file only~~ — resolved. |
 
 ---
 
@@ -107,22 +107,22 @@ These gate specific phases. Surface them to the human; do not guess.
 | P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | DONE (`7707a88`; split: `lib/env.ts` server + `lib/public-env.ts` client) |
 | P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | DONE (`7707a88`) |
 | P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | DONE (`7707a88`; apply refuses prod unless `APPLY_TO_PROD=1`) |
-| P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes. | main | P1.4, Q5 | BLOCKED (Q5) |
+| P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes. | main | P1.4, Q5 | DONE (2026-07-20; verified: app_users, reservation_groups, reservation_series, admin_audit_log + reservations.group_id/series_id + indexes) |
 
 ### P2 — Reservation engine (race-safe core)
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8). | code-writer | P1.1, Q1 | TODO |
-| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date). | code-writer | P2.1 | TODO |
-| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer | P2.1 | TODO |
-| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation. | code-writer | — | TODO |
-| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges. | test-engineer | P2.1–P2.4 | TODO |
+| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8). | code-writer | P1.1, Q1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
+| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date). | code-writer | P2.1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
+| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer | P2.1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
+| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation. | code-writer | — | VERIFIED — green on `integration/wave2` (`3636301`), merge pending |
+| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges. | test-engineer | P2.1–P2.4 | VERIFIED — covered by the code-writers' own suites (scheduler-policy/client/booking + recurrence), 92/92 green on `integration/wave2`, merge pending |
 
 ### P3 — Repositories & audit
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1 | TODO |
-| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail). | code-writer | P3.1 | TODO |
+| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1 | VERIFIED — green on `integration/wave2` (`0509643`), merge pending |
+| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail). | code-writer | P3.1 | VERIFIED — green on `integration/wave2` (`0509643`), merge pending |
 
 ### P4 — Auth & authorization
 | ID | Task | Owner | Depends | Status |
@@ -238,6 +238,28 @@ code-writer will build/verify on a branch and stop before merging; a human runs 
   P0.2–P1.4 now DONE; tree clean. Next wave = P2.4, P3.1, P3.2 (+ P2.4 tests), delegatable
   in parallel to `code-writer`/`test-engineer` (must pass `model: opus` — pinned model
   unavailable here). See "▶ Next session — start here". P2.1–P2.3 wait on Q1 repo address.
+- 2026-07-20 — **P1.5 DONE:** with human go-ahead (Q5 answered), applied `db/schema.sql` to the Neon
+  **dev** branch via `npm run db:apply` (`DATABASE_URL_DEV`, idempotent). Verified present: tables
+  `app_users`, `reservation_groups`, `reservation_series`, `admin_audit_log`; `reservations.group_id`
+  + `reservations.series_id`; and the new indexes. Prod apply remains P8.4. P9.1 mechanism decided:
+  monorepo `@bcc/scheduler` shared package, sequenced AFTER the current engine/repo branches land.
+- 2026-07-20 — Wave 2 dispatched (3 parallel `code-writer` agents, `model: opus`): P2.4 recurrence,
+  P3.1+P3.2 repositories & audit, P2.1–P2.3 race-safe engine copying storefront
+  `lib/scheduler/{db,client,policy}.ts`. Each: no DDL, no deploy, no `.env.local`, run checks
+  in-branch and STOP before merge (merge is human-gated), self-run tests instead of the
+  test-engineer subagent (pinned model unavailable).
+- 2026-07-21 — **Wave 2 complete, all green — MERGE PENDING (human).** All three agents delivered
+  clean, non-overlapping commits, but running them in one **shared working tree without worktree
+  isolation** scrambled the branch labels (each agent's commit landed on whichever branch HEAD had
+  drifted to). No work lost — commits are clean by SHA. Untangled by assembling one integration
+  branch **`integration/wave2`** = `master` + `0509643` (P3 repos+audit) + `4f7f11f` (P2.1–P2.3
+  engine) + `3636301` (P2.4 recurrence, cherry-picked). Verified the **combined** tree: `lint` ✓,
+  `typecheck` ✓, `npm test` **92/92 (8 files)** ✓, `build` exit 0. **Next: human runs
+  `git merge integration/wave2` into `master`**, then mark P2.1–P2.5, P3.1, P3.2 DONE with the
+  merge commit. LESSON: launch parallel `code-writer` agents with `isolation: "worktree"` to avoid
+  shared-tree branch scrambling. Stale mislabeled branches (`code-writer/p2-engine`,
+  `code-writer/p2.4-recurrence`, `code-writer/p3-repositories`, `code-writer/foundation-scaffold`)
+  can be pruned after the merge.
 - 2026-07-20 — **Storefront repo address provided:** https://github.com/thedavidhanks/bcc-rentals-frontend
   (verified reachable via `git ls-remote`; public, default branch `main`). Q1 fully resolved.
   Unblocks P2.1–P2.3 (copy race-safe write + policy from the storefront instead of
