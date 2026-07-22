@@ -29,10 +29,23 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-07-20)
+## Current state (as of 2026-07-22)
 
-**Foundation is built, verified, and merged to `master`** (merge commit `7707a88`).
-Working tree clean. A new session can `npm install && npm run build` and it passes.
+**Foundation + reservation engine + repositories are built, verified, and merged to
+`master`** (foundation merge `7707a88`; wave 2 fast-forwarded to tip `90e1659`). Working
+tree clean. A new session can `npm install && npm run build` and it passes; `npm test` is
+**92/92 green**. Neon **dev** branch has the §5 schema applied (P1.5).
+
+Landed in wave 2 (`0509643`, `4f7f11f`, `3636301`):
+- **Reservation engine** `lib/scheduler/{client,policy,types,errors}.ts` — race-safe
+  single-item write (advisory lock → capacity recheck → insert), multi-item/multi-occurrence
+  all-or-nothing booking (stable slug-order locks), Eastern policy helpers with staff-block
+  bypass (never bypasses capacity). Copied/adapted from storefront, tagged `// TODO(P9)`.
+- **Recurrence** `lib/scheduler/recurrence.ts` — pure `expandRecurrence()`, DST-proof civil-date
+  math, cap + truncation flag.
+- **Repositories** `lib/repositories/*` — typed read/write for all eight tables + `writeAuditLog`
+  (transaction-aware). Shared-table shapes tagged `// TODO(P9)`.
+- **Tests** — 92 unit tests (mocked `pg`); no live-DB integration test yet (see P7.1).
 
 Present in the repo now:
 - **App scaffold:** Next.js (App Router) + TypeScript, `next.config.ts` with
@@ -112,17 +125,17 @@ These gate specific phases. Surface them to the human; do not guess.
 ### P2 — Reservation engine (race-safe core)
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8). | code-writer | P1.1, Q1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
-| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date). | code-writer | P2.1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
-| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer | P2.1 | VERIFIED — green on `integration/wave2` (`4f7f11f`), merge pending |
-| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation. | code-writer | — | VERIFIED — green on `integration/wave2` (`3636301`), merge pending |
-| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges. | test-engineer | P2.1–P2.4 | VERIFIED — covered by the code-writers' own suites (scheduler-policy/client/booking + recurrence), 92/92 green on `integration/wave2`, merge pending |
+| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8). | code-writer | P1.1, Q1 | DONE (`4f7f11f`, merged to `master` ff `90e1659`) |
+| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date). | code-writer | P2.1 | DONE (`4f7f11f`) |
+| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer | P2.1 | DONE (`4f7f11f`) |
+| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation. | code-writer | — | DONE (`3636301`) |
+| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges. | test-engineer | P2.1–P2.4 | DONE — covered by the code-writers' own suites (scheduler-policy/client/booking + recurrence); 92/92 green on `master`. NOTE: all unit-level (mocked `pg`); no live-DB integration test yet (P7.1). |
 
 ### P3 — Repositories & audit
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1 | VERIFIED — green on `integration/wave2` (`0509643`), merge pending |
-| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail). | code-writer | P3.1 | VERIFIED — green on `integration/wave2` (`0509643`), merge pending |
+| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1 | DONE (`0509643`, merged to `master` ff `90e1659`) |
+| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail). | code-writer | P3.1 | DONE (`0509643`) — writer exists; wiring it into each mutation happens as P4/P6 actions land |
 
 ### P4 — Auth & authorization
 | ID | Task | Owner | Depends | Status |
@@ -181,41 +194,37 @@ this phase is unblocked. Code written in P2/P3 that mirrors storefront logic is 
 
 ## ▶ Next session — start here
 
-Context: P0–P1 foundation is DONE and merged (`7707a88`). Pick up here.
+Context: P0–P3 are DONE and merged (foundation `7707a88`; wave 2 tip `90e1659`). The engine,
+recurrence, and repositories exist and are green. Pick up here.
 
-**First: housekeeping (30 seconds)**
-- `npm install` (deps are in `package.json`/lock but `node_modules` isn't committed).
-- Untracked `.claude/agents/general-worker.md` exists — commit or ignore, your call.
+**First: housekeeping**
+- `npm install` if `node_modules` is absent.
+- Prune stale wave-2 branches (all content is now in `master`): `code-writer/foundation-scaffold`,
+  `code-writer/p2-engine`, `code-writer/p2.4-recurrence`, `code-writer/p3-repositories`,
+  `integration/wave2`.
 
-**Delegate this wave now (unblocked, no open questions needed):**
-| Task | What | Owner |
-|---|---|---|
-| P2.4 | Recurrence expansion — pure function, rule → Eastern occurrence dates, cap + truncation signal. Easiest clean win; fully specified. | code-writer |
-| P3.1 | Typed repositories for all eight tables (read/write against the schema). | code-writer |
-| P3.2 | `admin_audit_log` writer (depends on P3.1). | code-writer |
-| P2.5 (partial) | Tests for P2.4 recurrence expansion (DST edges). | test-engineer |
+**Delegate this wave now (unblocked):**
+| Task | What | Owner | Notes |
+|---|---|---|---|
+| P4.1–P4.3 (on stub) | Auth plumbing — middleware, session-cookie verify, UID→`app_users` role lookup, `requireScheduler`/`requireAdmin` — against the Q2 **dev-bypass stub** (`NODE_ENV !== 'production'`). Swap in real Firebase when Q2 lands. | code-writer | Unblocks the P5 shell/calendar; wire `writeAuditLog` into any mutating action. |
+| P5.1 | Responsive app shell + menu bar (stub auth OK). | code-writer | Depends on P4.3 guards existing (stub is fine). |
+| P5.2 | Weekly calendar (reads reservations via P3 repos). | code-writer | |
+| P9.1→P9.2 | Stand up the `@bcc/scheduler` shared package; begin extracting the common surface. | code-writer | Mechanism decided: npm-workspaces monorepo pkg, sequenced now that engine/repos have landed. |
 
-These can run as **parallel `code-writer` agents** (P2.4 and P3.1 touch different files).
-Give each the same guardrails: no DDL, no deploy, don't touch `.env.local`, tag any
-storefront-mirrored logic `// TODO(P9): consolidate`. **Model note:** the `code-writer`
-and `test-engineer` agents are pinned to a Vertex model that is NOT enabled here
-(`claude-sonnet-4-5`) — pass `model: opus` (or another available model) when launching, or
-they fail immediately.
+**Isolation reminder (learned the hard way in wave 2):** launch parallel `code-writer` agents
+with `isolation: "worktree"`. Wave 2 ran them in one shared tree and the branch labels
+scrambled (recoverable, but avoidable). One shared tree = one branch pointer they fight over.
 
-**Reservation engine core (P2.1–P2.3) is now unblocked** — the storefront repo has arrived
-(https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`). **Copy** the proven
-race-safe write + policy (`lib/scheduler/{db,client,policy}.ts`) from the storefront rather
-than reimplementing from spec §8 (spec: "Copying is safer than reimplementing"). Where you
-must adapt, tag `// TODO(P9): consolidate` so the shared-code phase can hoist it.
+**Model note:** `code-writer`/`test-engineer` are pinned to `claude-sonnet-4-5` (NOT enabled
+here) — pass `model: opus` when launching or they fail immediately.
 
-**Also now actionable:** P9.1 (repo in hand — decide the shared-code mechanism), which in
-turn opens the rest of P9.
-
-**Still blocked until the human provides answers** (see open-questions table): P1.5 (Q5),
-all of P4 (Q2/Q3), P8 deploy (Q4).
+**Still blocked until the human provides answers** (see open-questions table): P4 real auth
+(Q2) + prod-admin bootstrap (Q3), P8 deploy (Q4 — new dedicated GCP project recommended).
+P7.1 (live-DB cross-system check) waits on the P6 booking UI.
 
 **Merge protocol reminder:** `git merge` requires human approval in this environment —
-code-writer will build/verify on a branch and stop before merging; a human runs the merge.
+code-writer builds/verifies on a branch and stops; a human runs the merge. For a multi-agent
+wave, assemble one integration branch, verify the **combined** tree, then hand off one merge.
 
 ---
 
@@ -266,5 +275,12 @@ code-writer will build/verify on a branch and stop before merging; a human runs 
   reimplementing from spec) and P9.1 (repo in hand — next step is choosing the shared-code
   mechanism). Updated Q1 row, P9.1, the P9 intro, the "Next session" guidance, and CLAUDE.md's
   storefront-reference section accordingly. Repo is *not* vendored into this repo — copy/consolidate.
+- 2026-07-22 — **Wave 2 MERGED to `master` (fast-forward, tip `90e1659`).** Human ran the merge.
+  P2.1–P2.5, P3.1, P3.2 now DONE (`0509643` repos+audit, `4f7f11f` engine, `3636301` recurrence).
+  `master` green: `npm test` 92/92, `build` exit 0. Refreshed "Current state" and "Next session".
+  Stale wave-2 branches can be pruned (all content is on `master`). **Next wave:** P4 auth on the
+  dev-bypass stub → P5.1/P5.2 shell + calendar → begin P9.1/P9.2 shared package — launch parallel
+  code-writers **with `isolation: "worktree"`** this time. Still blocked on human: Q2 (Firebase),
+  Q3 (prod admin UID), Q4 (dedicated GCP project + `admin.bachmancc.org`).
 </content>
 </invoke>
