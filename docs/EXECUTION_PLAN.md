@@ -29,7 +29,7 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-07-22)
+## Current state (as of 2026-07-23)
 
 **Foundation + reservation engine + repositories are built, verified, and merged to
 `master`** (foundation merge `7707a88`; wave 2 fast-forwarded to tip `90e1659`). Working
@@ -80,10 +80,10 @@ These gate specific phases. Surface them to the human; do not guess.
 
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
-| Q1 | ✅ **ANSWERED + repo now provided:** https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
+| Q1 | ✅ **FULLY RESOLVED:** repo https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`, verified reachable 2026-07-23, tip `1074a9e`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Mechanism **decided**: npm-workspaces monorepo package `@bcc/scheduler`. Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
 | Q2 | **Firebase / Identity Platform project details**: project id, Web SDK config keys, and which social providers to enable (Google/GitHub/Facebook/Apple). Each needs its own OAuth app. | P4 | Cannot complete auth; stub a dev-only bypass gated behind `NODE_ENV !== 'production'` so other phases proceed. |
 | Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
-| Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. | P8 | Deploy phase stays BLOCKED. |
+| Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. Now largely superseded by **P10** — the org/project structure (`bcc-admin-prod` etc.) produces the concrete project ids the deploy needs. | P8, P10 | Deploy phase stays BLOCKED until P10.4 creates `bcc-admin-prod`. |
 | Q5 | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4. | P1.4 (apply) | ~~Write `schema.sql` as a file only~~ — resolved. |
 
 ---
@@ -170,13 +170,15 @@ These gate specific phases. Surface them to the human; do not guess.
 ### P9 — Shared code consolidation (with storefront)
 Per the human's direction (Q1): common functions must live in a **shared/common area**
 consumed by both storefront and admin, not duplicated. **The storefront repo is now
-available** (https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`), so
-this phase is unblocked. Code written in P2/P3 that mirrors storefront logic is tagged
-`// TODO(P9): consolidate` so it's easy to find and hoist.
+available** (https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`,
+verified reachable 2026-07-23, tip `1074a9e`), so this phase is unblocked. The shared-code
+**mechanism is decided: an npm-workspaces monorepo package `@bcc/scheduler`.** Code written
+in P2/P3 that mirrors storefront logic is tagged `// TODO(P9): consolidate` so it's easy to
+find and hoist.
 
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P9.1 | ~~Obtain storefront repo (address from human)~~ — **repo provided: https://github.com/thedavidhanks/bcc-rentals-frontend** (public, `main`). Remaining: decide the shared-code mechanism (e.g. workspaces monorepo package `@bcc/scheduler`, git submodule, or published internal pkg). | main | Q1 addr | TODO (unblocked — repo in hand; pick mechanism) |
+| P9.1 | ~~Obtain storefront repo (address from human)~~ + ~~decide the shared-code mechanism~~. Repo provided & verified: https://github.com/thedavidhanks/bcc-rentals-frontend (public, `main`). Mechanism chosen: **npm-workspaces monorepo package `@bcc/scheduler`**. Standing up the package + extraction is P9.2. | main | Q1 addr | DONE (2026-07-23 — repo confirmed reachable; mechanism = npm-workspaces `@bcc/scheduler`) |
 | P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | TODO |
 | P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites. | code-writer | P9.2 | TODO |
 | P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers). | code-writer | P9.3 | TODO |
@@ -185,10 +187,57 @@ this phase is unblocked. Code written in P2/P3 that mirrors storefront logic is 
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
 | P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main | — | TODO |
-| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, Q4 | BLOCKED (Q4) |
+| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | BLOCKED (needs `bcc-admin-prod` from P10.4) |
 | P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4) |
 | P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | BLOCKED |
 | P8.5 | Production smoke test (login per provider, create block, storefront reflects). | main | P8.4 | BLOCKED |
+
+### P10 — GCP organization & project structure
+Foundational cloud layout for **both** the admin app and the storefront. This precedes the
+P8 deploy tasks — Cloud Run, Secret Manager, and Identity Platform all need their target
+project to exist first (resolves Q4). Target hierarchy:
+
+```
+bachmancc.org                             (Organization)
+└── bcc-rentals                           (Folder)
+    ├── bcc-storefront-prod               (Cloud Run · Identity Platform: customers)
+    ├── bcc-storefront-staging
+    ├── bcc-admin-prod                    (Cloud Run · Identity Platform: staff · Secret Mgr: Neon creds)
+    └── bcc-admin-staging
+```
+
+Rationale (see architecture discussion): one project **per app × environment** for IAM/blast-radius
+isolation (the admin app is a privileged second writer to the shared prod DB; the storefront is
+public), independent per-project runtime service accounts + Secret Manager, separate Identity
+Platform user pools (staff vs customers), and per-project billing. The shared DB is Neon (external
+to GCP), so nothing forces the two apps to co-locate.
+
+**An Organization needs an identity account bound to a domain you control.** A GCP Org is created
+automatically once a **Cloud Identity** *or* **Google Workspace** account is associated with
+`bachmancc.org`. Cloud Identity **Free** is sufficient and $0; Google Workspace for
+Nonprofits (if eligible) also yields the Org and adds the collaboration suite — see the director
+note below.
+
+| ID | Task | Owner | Depends | Status |
+|---|---|---|---|---|
+| P10.1 | **Talk to the community-center director** about adopting Google Workspace for Nonprofits (features listed below). Decide: Cloud Identity Free only, or Workspace for Nonprofits too. Confirm the org owns/controls the `bachmancc.org` domain + DNS. | main | — | TODO |
+| P10.2 | Register the identity account for `bachmancc.org`: **Cloud Identity Free now** (creates the Org immediately, unblocks everything downstream), **and** apply for **Google Workspace for Nonprofits** if the director opts in (eligibility runs through Google for Nonprofits / a validation partner and can take days–weeks — don't let it gate P10.3). Verify domain ownership via DNS TXT. | main | P10.1 | TODO |
+| P10.3 | Create the GCP **Organization** `bachmancc.org` (auto-appears on first Cloud Console sign-in as the identity account) and the **folder** `bcc-rentals`. Apply baseline org policies + a budget alert. | main | P10.2 | TODO |
+| P10.4 | Create the four projects under `bcc-rentals`: `bcc-storefront-prod`, `bcc-storefront-staging`, `bcc-admin-prod`, `bcc-admin-staging`. Per project: link billing, enable Cloud Run, create a least-privilege runtime SA, enable Identity Platform (customers on storefront, staff on admin). Store Neon creds in **`bcc-admin-prod`** Secret Manager. | main | P10.3 | TODO |
+| P10.5 | If the storefront already lives in a standalone / personal-account project, **migrate it into the `bcc-rentals` folder** (projects can be moved into an Org after the fact). If it predates this, no rebuild — just re-parent. | main | P10.3 | TODO |
+
+**Director note — Google Workspace for Nonprofits features (for the P10.1 conversation):**
+Google grants eligible nonprofits Google Workspace at no cost, which bundles the collaboration
+tools most churches/community centers already want. Highlights: **Email** — professional
+addresses on your own domain (e.g. `office@bachmancc.org`), shared mailboxes, and
+distribution groups via Gmail. **Storage** — pooled **Google Drive** (typically ~100 TB shared
+across the organization) with Shared Drives so files belong to the org rather than an individual,
+plus the **Docs / Sheets / Slides / Forms** editors. **Calendars** — shared **Google Calendar**
+for staff scheduling, bookable resources (rooms/equipment), and event coordination. Also included:
+**Google Meet** video conferencing, **Google Sites**, **Google Groups**, and centralized admin
+controls (user management, security policies, 2-step verification enforcement). Adopting Workspace
+also produces the Cloud Identity account that backs the GCP Organization above, so P10.2 and the
+center's day-to-day productivity tooling can be handled in one signup.
 
 ---
 
@@ -209,7 +258,7 @@ recurrence, and repositories exist and are green. Pick up here.
 | P4.1–P4.3 (on stub) | Auth plumbing — middleware, session-cookie verify, UID→`app_users` role lookup, `requireScheduler`/`requireAdmin` — against the Q2 **dev-bypass stub** (`NODE_ENV !== 'production'`). Swap in real Firebase when Q2 lands. | code-writer | Unblocks the P5 shell/calendar; wire `writeAuditLog` into any mutating action. |
 | P5.1 | Responsive app shell + menu bar (stub auth OK). | code-writer | Depends on P4.3 guards existing (stub is fine). |
 | P5.2 | Weekly calendar (reads reservations via P3 repos). | code-writer | |
-| P9.1→P9.2 | Stand up the `@bcc/scheduler` shared package; begin extracting the common surface. | code-writer | Mechanism decided: npm-workspaces monorepo pkg, sequenced now that engine/repos have landed. |
+| P9.2 | Stand up the `@bcc/scheduler` shared package; begin extracting the common surface. | code-writer | P9.1 DONE (repo confirmed reachable 2026-07-23; mechanism = npm-workspaces monorepo pkg). Sequenced now that engine/repos have landed. |
 
 **Isolation reminder (learned the hard way in wave 2):** launch parallel `code-writer` agents
 with `isolation: "worktree"`. Wave 2 ran them in one shared tree and the branch labels
@@ -282,5 +331,28 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   dev-bypass stub → P5.1/P5.2 shell + calendar → begin P9.1/P9.2 shared package — launch parallel
   code-writers **with `isolation: "worktree"`** this time. Still blocked on human: Q2 (Firebase),
   Q3 (prod admin UID), Q4 (dedicated GCP project + `admin.bachmancc.org`).
+- 2026-07-23 — **Added phase P10 (GCP organization & project structure).** Decided the cloud layout:
+  Organization `bachmancc.org` → folder `bcc-rentals` → four projects (`bcc-storefront-prod/staging`,
+  `bcc-admin-prod/staging`), one per app × environment for IAM/blast-radius isolation. Tasks cover the
+  director conversation about Google Workspace for Nonprofits (P10.1), registering **Cloud Identity Free**
+  (creates the Org for $0, unblocks everything) and applying for **Workspace for Nonprofits** if opted in
+  (P10.2), creating the Org+folder (P10.3), the four projects (P10.4), and re-parenting the storefront if
+  it's currently standalone (P10.5). Included a director-facing paragraph listing Workspace features
+  (email on the domain, pooled Drive storage + Docs suite, shared Calendars, Meet/Groups/admin controls).
+  Updated Q4 (superseded by P10) and P8.2 depends → P10.4. No code changes.
+- 2026-07-23 — **Corrected the org domain in P10 to `bachmancc.org`** (was `bachmancommunitycenter.org` — the
+  real domain matches `admin.bachmancc.org` in the spec/CLAUDE.md). Updated the P10 hierarchy tree, prose,
+  the P10.1–P10.3 rows, the example email, and the earlier P10 log entry. Human has completed **Cloud Identity
+  Free signup + domain verification** for `bachmancc.org`, with `gcp-admin@bachmancc.org` as super admin
+  (functional/role account — recommended over a personal address; note Cloud Identity Free has no mailbox, so
+  a recovery email/phone + a second break-glass super admin are advised). **P10.2 intentionally NOT marked
+  DONE** — human has follow-up questions before closing it.
+- 2026-07-23 — **Q1 fully closed + P9.1 DONE.** Re-verified the storefront repo is reachable
+  (`git ls-remote https://github.com/thedavidhanks/bcc-rentals-frontend` → `refs/heads/main` at
+  `1074a9e`, public). With the repo in hand and the shared-code mechanism already decided
+  (npm-workspaces monorepo package `@bcc/scheduler`), **P9.1 is complete** — standing up the
+  package + extracting the common surface is P9.2 (next). Reconciled the doc so the Q1 row, P9.1
+  row, P9 intro, and "Next session" table all agree (previously P9.1 still read "pick mechanism"
+  while the log/Next-session said it was decided). No code changes.
 </content>
 </invoke>
