@@ -187,7 +187,7 @@ find and hoist.
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
 | P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main | — | TODO |
-| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | BLOCKED (needs `bcc-admin-prod` from P10.4) |
+| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | TODO (unblocked — `bcc-admin-prod` exists w/ billing+APIs+`run-runtime` SA; `DATABASE_URL` secret + accessor already granted. Needs P8.1 runbook.) |
 | P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4) |
 | P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | BLOCKED |
 | P8.5 | Production smoke test (login per provider, create block, storefront reflects). | main | P8.4 | BLOCKED |
@@ -222,9 +222,9 @@ note below.
 |---|---|---|---|---|
 | P10.1 | **Talk to the community-center director** about adopting Google Workspace for Nonprofits (features listed below). Decide: Cloud Identity Free only, or Workspace for Nonprofits too. Confirm the org owns/controls the `bachmancc.org` domain + DNS. | main | — | TODO |
 | P10.2 | Register the identity account for `bachmancc.org`: **Cloud Identity Free now** (creates the Org immediately, unblocks everything downstream), **and** apply for **Google Workspace for Nonprofits** if the director opts in (eligibility runs through Google for Nonprofits / a validation partner and can take days–weeks — don't let it gate P10.3). Verify domain ownership via DNS TXT. | main | P10.1 | TODO |
-| P10.3 | Create the GCP **Organization** `bachmancc.org` (auto-appears on first Cloud Console sign-in as the identity account) and the **folder** `bcc-rentals`. Apply baseline org policies + a budget alert. | main | P10.2 | TODO |
-| P10.4 | Create the four projects under `bcc-rentals`: `bcc-storefront-prod`, `bcc-storefront-staging`, `bcc-admin-prod`, `bcc-admin-staging`. Per project: link billing, enable Cloud Run, create a least-privilege runtime SA, enable Identity Platform (customers on storefront, staff on admin). Store Neon creds in **`bcc-admin-prod`** Secret Manager. | main | P10.3 | TODO |
-| P10.5 | If the storefront already lives in a standalone / personal-account project, **migrate it into the `bcc-rentals` folder** (projects can be moved into an Org after the fact). If it predates this, no rebuild — just re-parent. | main | P10.3 | TODO |
+| P10.3 | Create the GCP **Organization** `bachmancc.org` (auto-appears on first Cloud Console sign-in as the identity account) and the **folder** `bcc-rentals`. Apply baseline org policies + a budget alert. | main | P10.2 | DONE (2026-07-23 — org `513346324292` pre-existed; folder `bcc-rentals`=`873642981137`; $50/mo budget w/ 50/90/100% alerts on billing acct `01E5FF-02B2AA-CE23CF`. Baseline org policies: recommended, awaiting human decision — see log.) |
+| P10.4 | Create the four projects under `bcc-rentals`: `bcc-storefront-prod`, `bcc-storefront-staging`, `bcc-admin-prod`, `bcc-admin-staging`. Per project: link billing, enable Cloud Run, create a least-privilege runtime SA, enable Identity Platform (customers on storefront, staff on admin). Store Neon creds in **`bcc-admin-prod`** Secret Manager. | main | P10.3 | DONE (2026-07-23 — 4 projects created & billing-linked; APIs enabled (run, artifactregistry, identitytoolkit, secretmanager, iam); `run-runtime` SA per project; `DATABASE_URL` secret shell in `bcc-admin-prod` w/ runtime-SA `secretAccessor` — value added out-of-band by human. Identity Platform pool config (staff/customer) deferred to P4/P8.) |
+| P10.5 | Bring the storefront under the org. Original plan was to **re-parent** the personal-account project; changed to **redeploy** (see note). | main | P10.3, P10.4 | DONE for **staging** (2026-07-23 — redeployed `bcc-rentals-frontend` into `bcc-storefront-staging` (`78017895905`), Cloud Run `us-east1`, service `bcc-rentals`, URL `https://bcc-rentals-78017895905.us-east1.run.app`). **Decision reversed: redeploy, not re-parent** — the org has domain-restricted sharing on by default (`iam.allowedPolicyMemberDomains`), which blocks moving a project owned by external `dphanks@gmail.com` into the folder (and blocks adding gmail identities to any org resource). Redeploy was cleaner for a dev site. Personal `bcc-rentals` project under `dphanks@gmail.com` still exists (untouched) — decommission once the org deployment is promoted. **TODO if wanted:** prod storefront redeploy into `bcc-storefront-prod` + domain mapping. |
 
 **Director note — Google Workspace for Nonprofits features (for the P10.1 conversation):**
 Google grants eligible nonprofits Google Workspace at no cost, which bundles the collaboration
@@ -248,9 +248,9 @@ recurrence, and repositories exist and are green. Pick up here.
 
 **First: housekeeping**
 - `npm install` if `node_modules` is absent.
-- Prune stale wave-2 branches (all content is now in `master`): `code-writer/foundation-scaffold`,
-  `code-writer/p2-engine`, `code-writer/p2.4-recurrence`, `code-writer/p3-repositories`,
-  `integration/wave2`.
+- ~~Prune stale wave-2 branches~~ **DONE (2026-07-23)** — verified none exist locally or on
+  `origin` (only `refs/heads/master` + `refs/remotes/origin/master` remain); all content is on
+  `master`. Nothing to prune.
 
 **Delegate this wave now (unblocked):**
 | Task | What | Owner | Notes |
@@ -354,5 +354,50 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   package + extracting the common surface is P9.2 (next). Reconciled the doc so the Q1 row, P9.1
   row, P9 intro, and "Next session" table all agree (previously P9.1 still read "pick mechanism"
   while the log/Next-session said it was decided). No code changes.
+- 2026-07-23 — **P10.3 + P10.4 DONE — GCP org/project architecture built** (driven from CLI as
+  `gcp-admin@bachmancc.org`). Org `bachmancc.org` (`513346324292`) pre-existed; created folder
+  **`bcc-rentals`** (`873642981137`) and the four projects: `bcc-storefront-prod` (`259601604284`),
+  `bcc-storefront-staging` (`78017895905`), `bcc-admin-prod` (`305395393303`), `bcc-admin-staging`
+  (`612782676839`). Human created Cloud Billing account **`01E5FF-02B2AA-CE23CF`** (`bachmancc-billing`)
+  in Console (no CLI path exists); linked to all four. Per project enabled APIs: `run`,
+  `artifactregistry`, `identitytoolkit`, `secretmanager`, `iam`, `cloudresourcemanager`; created a
+  least-privilege **`run-runtime`** SA. In `bcc-admin-prod`: created **`DATABASE_URL`** secret shell +
+  granted `run-runtime` `secretAccessor` on it (human pipes the value out-of-band — prod secret never
+  entered the session). Created a **$50/mo budget** (50/90/100% alerts) on the billing account.
+  Gotchas hit: (1) `organizationAdmin` lacks folder-create — granted `gcp-admin` `folderCreator` at the
+  org. (2) Rapid `projects create` tripped the **shared** default quota project (`32555940559`, 429
+  RATE_LIMIT) — fixed permanently by `gcloud config set billing/quota_project bcc-storefront-prod` +
+  enabling `cloudresourcemanager`/`cloudbilling`/`iam` there. **Deferred:** baseline org policies
+  (recommended, awaiting human decision — NOT applying `iam.disableServiceAccountKeyCreation` since the
+  spec allows a Firebase Admin key for local dev; `iam.allowedPolicyMemberDomains` deferred until after
+  the storefront re-parent to avoid blocking the cross-account move). Identity Platform staff/customer
+  pool config deferred to P4/P8. **Unblocks P8.2** (bcc-admin-prod ready). P10.5 storefront re-parent
+  is next: `BCC-rentals`/`bcc-rentals` confirmed under personal `dphanks@gmail.com` — decision is
+  **re-parent (zero-downtime), not redeploy**; cross-account, needs `dphanks@gmail.com` to grant
+  ownership or run the move.
+- 2026-07-23 — **P10.5 storefront: decision REVERSED to redeploy; DONE for staging.** Attempted the
+  re-parent first (granted `gcp-admin` `projectMover`+`billing.projectManager` on the personal
+  `bcc-rentals` project — those succeed because it has no org policy yet — plus folder-level
+  `projectMover`). The `projects move` kept failing, and the root cause surfaced when granting
+  `dphanks@gmail.com` on the folder returned **`User dphanks@gmail.com is not in permitted organization`**:
+  the new org enforces **`iam.allowedPolicyMemberDomains`** (domain-restricted sharing) **by default**,
+  which blocks both adding external gmail identities to org resources and migrating an
+  externally-owned project in. Human called it — it's a **dev site**, so we **redeployed** instead:
+  `gcloud run deploy` of `bcc-rentals-frontend` into **`bcc-storefront-staging`** (`us-east1`, service
+  `bcc-rentals`) → `https://bcc-rentals-78017895905.us-east1.run.app`. Storefront env is all external
+  (Neon/PayPal/Resend/Upstash) so nothing DB-related changed; only `NEXT_PUBLIC_SITE_URL` (bake the
+  new URL at build time) and `PAYPAL_WEBHOOK_ID` (new webhook for the new URL) needed correcting, with
+  `PAYPAL_ENV=sandbox` for the dev site. Enabled `cloudbuild` on both storefront projects for
+  `--source` deploys. **Cleanup DONE (2026-07-23):** removed the temp grants to `gcp-admin` on the
+  personal `bcc-rentals` project (`projectMover`, `billing.projectManager`) + the folder-level
+  `projectMover`; verified no residual `gcp-admin` bindings on `bcc-rentals`. **Lesson for P8 (admin deploy):** the same domain-restriction default is in force — keep all
+  identities `@bachmancc.org`; `--allow-unauthenticated` on Cloud Run still works (it's an IAM
+  `allUsers` invoker binding on the service, exempt from the member-domain constraint).
+- 2026-07-23 — **Housekeeping: stale wave-2 branch prune verified complete.** Checked all refs —
+  only `refs/heads/master` and `refs/remotes/origin/master` exist; the five flagged wave-2 branches
+  (`code-writer/foundation-scaffold`, `code-writer/p2-engine`, `code-writer/p2.4-recurrence`,
+  `code-writer/p3-repositories`, `integration/wave2`) are already gone (never persisted past their
+  wave-2 worktrees/session). All content is on `master` (tip `2afcb2f`). Nothing to delete; marked
+  the "Next session" housekeeping item DONE.
 </content>
 </invoke>

@@ -44,6 +44,27 @@ is unchanged by anything here.
   categories, users). Enforce on the **server** in every mutating route/action —
   `requireScheduler` / `requireAdmin`. Never rely on hidden UI.
 
+## GCP layout (org `bachmancc.org`, id `513346324292`)
+
+Built under phase P10. Folder **`bcc-rentals`** (`873642981137`) holds four projects, one
+per app × environment, all on billing account `01E5FF-02B2AA-CE23CF` (`bachmancc-billing`):
+
+- `bcc-storefront-prod` (`259601604284`) · `bcc-storefront-staging` (`78017895905`)
+- **`bcc-admin-prod` (`305395393303`)** ← this app's deploy target · `bcc-admin-staging` (`612782676839`)
+
+Each project has APIs enabled (`run`, `artifactregistry`, `identitytoolkit`, `secretmanager`,
+`iam`, `cloudbuild`) and a least-privilege `run-runtime@<project>.iam.gserviceaccount.com` SA
+(deploy Cloud Run **as this SA**, not the default compute SA). `bcc-admin-prod` Secret Manager
+holds the `DATABASE_URL` secret with `run-runtime` granted `secretAccessor` on it.
+
+- The **storefront** now also runs in the org — redeployed to `bcc-storefront-staging`
+  (`https://bcc-rentals-78017895905.us-east1.run.app`). Its personal-account original
+  (`dphanks@gmail.com`) was **not** migrated: the org enforces **domain-restricted sharing**
+  (`iam.allowedPolicyMemberDomains`) by default, which blocks moving externally-owned projects
+  in or adding non-`@bachmancc.org` identities to any org resource.
+- **Deploy gotcha:** keep every IAM member `@bachmancc.org`. `--allow-unauthenticated` on Cloud
+  Run still works (it's an `allUsers` invoker binding, exempt from the member-domain constraint).
+
 ## Schema
 
 - **Existing (storefront-owned), read the spec §4:** `items`, `item_prices`, `categories`,
