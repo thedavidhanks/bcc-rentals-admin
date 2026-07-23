@@ -1,0 +1,158 @@
+:root {
+  --nav-bg: #1f2933;
+  --nav-fg: #e4e7eb;
+  --nav-fg-muted: #9aa5b1;
+  --nav-active: #3b82f6;
+  --nav-hover: #323f4b;
+  --content-max: 72rem;
+  --breakpoint-sm: 48rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2933;
+  background: #f5f7fa;
+}
+
+/* ---- App navigation ---- */
+.app-nav {
+  background: var(--nav-bg);
+  color: var(--nav-fg);
+}
+
+.app-nav__bar {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.app-nav__brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--nav-fg);
+  text-decoration: none;
+  margin-right: auto;
+}
+
+.app-nav__toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--nav-fg-muted);
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.app-nav__toggle-bar {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--nav-fg);
+  border-radius: 2px;
+}
+
+.app-nav__menu {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.app-nav__list {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+}
+
+.app-nav__link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  color: var(--nav-fg-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.app-nav__link:hover {
+  background: var(--nav-hover);
+  color: var(--nav-fg);
+}
+
+.app-nav__link--active {
+  color: #fff;
+  background: var(--nav-active);
+}
+
+.app-nav__user {
+  color: var(--nav-fg-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* ---- Responsive: collapse to hamburger below the breakpoint ---- */
+@media (max-width: 48rem) {
+  .app-nav__toggle {
+    display: flex;
+  }
+
+  .app-nav__menu {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding-top: 0.5rem;
+  }
+
+  .app-nav__menu--open {
+    display: flex;
+  }
+
+  .app-nav__list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .app-nav__link {
+    padding: 0.75rem;
+  }
+}
+
+/* ---- Page content ---- */
+.app-main {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.page-placeholder h1 {
+  margin-top: 0;
+}
+
+.page-placeholder p {
+  color: #52606d;
+  max-width: 42rem;
+}

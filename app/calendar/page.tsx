@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { requireScheduler } from "@/lib/auth/guards";
 import {
   BCC_TIMEZONE,
   buildWeekDays,
@@ -98,6 +99,10 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ week?: string | string[] }>;
 }) {
+  // Scheduler+admin view; unauthenticated/unknown users are redirected/denied
+  // (P4.3, resolved at wave-3 integration — replaces the prior TODO placeholder).
+  await requireScheduler();
+
   const params = await searchParams;
   const weekParam = Array.isArray(params.week) ? params.week[0] : params.week;
 
@@ -248,10 +253,6 @@ export default async function CalendarPage({
           Cancelled
         </span>
       </div>
-
-      {/* TODO(integration): protect this scheduler+admin view with
-          requireScheduler() from lib/auth/guards.ts (Agent A / P4.3) once the
-          auth module lands. Kept unguarded here so the page builds in isolation. */}
     </main>
   );
 }
