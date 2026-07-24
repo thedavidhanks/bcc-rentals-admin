@@ -88,14 +88,14 @@ export const MAX_OCCURRENCES = 104;
 // no timezone, so nothing here is affected by DST.
 // ---------------------------------------------------------------------------
 
-interface Ymd {
+export interface Ymd {
   y: number;
   m: number; // 1..12
   d: number; // 1..31
 }
 
 /** Days from 1970-01-01 for a civil (y, m, d). */
-function daysFromCivil(y: number, m: number, d: number): number {
+export function daysFromCivil(y: number, m: number, d: number): number {
   const yy = y - (m <= 2 ? 1 : 0);
   const era = Math.floor((yy >= 0 ? yy : yy - 399) / 400);
   const yoe = yy - era * 400; // [0, 399]
@@ -105,7 +105,7 @@ function daysFromCivil(y: number, m: number, d: number): number {
 }
 
 /** Civil (y, m, d) for a day number counted from 1970-01-01. */
-function civilFromDays(z: number): Ymd {
+export function civilFromDays(z: number): Ymd {
   const zz = z + 719468;
   const era = Math.floor((zz >= 0 ? zz : zz - 146096) / 146097);
   const doe = zz - era * 146097; // [0, 146096]
@@ -121,7 +121,7 @@ function civilFromDays(z: number): Ymd {
 }
 
 /** Weekday of a day number, `0=Sun..6=Sat`. */
-function weekdayFromDays(z: number): number {
+export function weekdayFromDays(z: number): number {
   return ((z % 7) + 4 + 7) % 7; // 1970-01-01 (day 0) is Thursday(4)
 }
 
@@ -146,7 +146,7 @@ function daysInMonth(y: number, m: number): number {
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Parse `YYYY-MM-DD` to a day number, validating the calendar date. */
-function parseDateToDays(value: string, field: string): number {
+export function parseDateToDays(value: string, field: string): number {
   const match = DATE_RE.exec(value);
   if (!match) {
     throw new Error(`${field} must be a YYYY-MM-DD date, got: ${JSON.stringify(value)}`);
@@ -164,7 +164,7 @@ function parseDateToDays(value: string, field: string): number {
 }
 
 /** Format a day number as `YYYY-MM-DD`. */
-function formatDays(z: number): string {
+export function formatDays(z: number): string {
   const { y, m, d } = civilFromDays(z);
   const yyyy = String(y).padStart(4, "0");
   const mm = String(m).padStart(2, "0");
