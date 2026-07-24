@@ -25,6 +25,10 @@ const serverEnvSchema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().min(1).optional(),
   // Optional extra guard layered on top of the app_users lookup.
   ALLOWED_EMAIL_DOMAIN: z.string().min(1).optional(),
+  // Dev-only auth bypass toggle (see lib/auth/session.ts). The bypass is active
+  // only when NODE_ENV !== 'production'; set to "off" to exercise the real
+  // Firebase path locally. Never enables in production regardless of value.
+  AUTH_DEV_BYPASS: z.enum(["on", "off"]).optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
