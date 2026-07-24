@@ -9,6 +9,10 @@ import { SESSION_COOKIE_NAME } from "./constants";
 import { verifySession } from "./session";
 import type { SessionUser } from "./types";
 
+// Re-export the canonical role union from the auth barrel so callers that only
+// need the role type (e.g. nav filtering) import it from here alongside the guards.
+export type { UserRole } from "./types";
+
 // ---------------------------------------------------------------------------
 // Server-side authorization guards (spec §3/§10, execution-plan P4.3).
 //

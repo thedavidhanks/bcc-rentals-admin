@@ -1,4 +1,4 @@
-import type { SessionRole } from "@/lib/auth/guards";
+import type { UserRole } from "@/lib/auth/guards";
 
 export interface NavItem {
   /** Visible label in the menu bar. */
@@ -24,6 +24,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 /** Filter the menu entries down to what the given role may see. */
-export function navItemsForRole(role: SessionRole): NavItem[] {
+export function navItemsForRole(role: UserRole): NavItem[] {
   return NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin");
 }
