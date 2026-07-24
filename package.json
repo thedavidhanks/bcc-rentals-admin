@@ -2,6 +2,9 @@
   "name": "bcc-rentals-admin",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,6 +15,7 @@
     "db:apply": "node scripts/db/apply-schema.mjs"
   },
   "dependencies": {
+    "@bcc/scheduler": "*",
     "next": "^15.5.20",
     "pg": "^8.13.1",
     "react": "19.0.0",

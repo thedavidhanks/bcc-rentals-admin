@@ -15,7 +15,9 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@bcc/scheduler": ["./packages/scheduler/src/index.ts"],
+      "@bcc/scheduler/*": ["./packages/scheduler/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

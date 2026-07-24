@@ -1,0 +1,7 @@
+{
+  // Composes with the repo-root tsconfig. The package is not compiled standalone
+  // (root `tsc --noEmit` type-checks it via the `**/*.ts` include); this file
+  // exists so editors/tools that open the package resolve the same options.
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*.ts"]
+}
