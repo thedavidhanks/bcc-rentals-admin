@@ -30,11 +30,19 @@ is unchanged by anything here.
    Identity Platform with multiple social providers (Google, GitHub, Facebook, Apple).
    The Firebase **UID** is the durable account id; `app_users.role` in the DB is the
    canonical permission store. Verify tokens server-side; deny unknown users.
+   **Current state:** auth plumbing (`lib/auth/*`, `middleware.ts`, `app/login`,
+   `app/api/auth/session`) is wired on a **dev-bypass stub** (Q2 pending) — the UID→role
+   lookup and `requireScheduler`/`requireAdmin` guards are real; the token verify/providers
+   are stubbed and must be swapped for real Firebase when the Q2 project details land.
 
 ## Architecture
 
 - **Stack:** Next.js (App Router) + TypeScript + `pg`. Deploys to GCP Cloud Run
   (`us-east1`, scale-to-zero), `output: 'standalone'`. Secrets in Secret Manager.
+- **Monorepo:** npm workspaces. Shared code lives in `packages/scheduler` (`@bcc/scheduler`,
+  P9.2) and is consumed via workspaces + `tsconfig` paths / `transpilePackages` — **no build
+  step**. Import the common scheduler/product surface from `@bcc/scheduler`; do **not**
+  re-duplicate it. Consolidating the remaining `TODO(P9)` copies is P9.3/P9.4.
 - **DB:** the storefront's Neon Postgres. Runtime uses the **pooled** endpoint
   (`DATABASE_URL`); `DATABASE_URL_DEV` is for one-off DDL/tooling only. Access via `pg`
   `Pool`; wrap multi-statement writes in a transaction.
@@ -133,7 +141,12 @@ The spec cites `lib/scheduler/{db,client,policy}.ts`, `lib/products/{types,repos
 **Storefront repo:** https://github.com/thedavidhanks/bcc-rentals-frontend (public,
 default branch `main`). It is not vendored into this repo. **Copy** the scheduler module
 from there rather than reimplementing (spec §8: "Copying is safer than reimplementing"),
-and reconcile any spec-pseudocode reimplementations against it. The shared-code
-consolidation (execution-plan phase P9) is the durable home for this common surface —
-prefer consolidating over duplicating. Q1 is now answered.
+and reconcile any spec-pseudocode reimplementations against it.
+
+The shared-code consolidation (execution-plan phase P9) is the durable home for this common
+surface. **P9.2 has landed:** the shared package `@bcc/scheduler` (`packages/scheduler`) now
+exports `scheduler/{errors,policy,types}` + `products/types` — import from it, don't
+duplicate. Remaining: P9.3 refactors **both** storefront and admin to consume the package and
+removes the duplicated copies; P9.4 reconciles the `TODO(P9)` markers against the canonical
+implementation. Q1 is answered.
 </content>

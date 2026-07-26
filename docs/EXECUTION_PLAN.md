@@ -29,12 +29,29 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-07-23)
+## Current state (as of 2026-07-24)
 
-**Foundation + reservation engine + repositories are built, verified, and merged to
-`master`** (foundation merge `7707a88`; wave 2 fast-forwarded to tip `90e1659`). Working
-tree clean. A new session can `npm install && npm run build` and it passes; `npm test` is
-**92/92 green**. Neon **dev** branch has the §5 schema applied (P1.5).
+**Foundation + reservation engine + repositories + auth plumbing + UI shell/calendar +
+shared package are built, verified, and merged to `master`** (foundation `7707a88`; wave 2
+tip `90e1659`; **wave 3 merged, tip `c648610`**). Working tree clean. `npm run typecheck`
+is clean and `npm test` is **139/139 green** (12 files). Neon **dev** branch has the §5
+schema applied (P1.5).
+
+Landed in wave 3 (`961209f`, `a891d05`, `e68274c`, `809785a`, `c648610`):
+- **Auth plumbing (P4.1–P4.3)** on the Q2 **dev-bypass stub** — `app/login/*` sign-in UI,
+  `lib/auth/{session,guards,firebase-client,types,constants}.ts`, `middleware.ts`,
+  `app/api/auth/session`. UID→`app_users` role lookup + `requireScheduler`/`requireAdmin`
+  guards. **Swap in real Firebase when Q2 lands** (real providers, Admin SDK `verifyIdToken`).
+- **App shell (P5.1)** — `components/nav/*` responsive role-aware navigation (admin entries
+  hidden from schedulers; server still enforces).
+- **Weekly calendar (P5.2)** — `app/calendar/*`, multi-day spanning bars, cross-week
+  continuation, block/confirmed styling, prev/next/today, `+` → Add Reservation.
+- **Shared package (P9.2)** — `packages/scheduler` = `@bcc/scheduler`, npm-workspaces
+  monorepo pkg (no build step; TS consumed via workspaces + tsconfig paths). Exports
+  `scheduler/{errors,policy,types}` + `products/types`. Placeholder route dirs scaffolded:
+  `app/{products,prices,categories,users,reservations}` (P6 fills these in).
+- **Tests** — +47 (auth-session, auth-guards, nav-config, calendar-week); still unit-level
+  (mocked `pg`); no live-DB integration test yet (see P7.1).
 
 Landed in wave 2 (`0509643`, `4f7f11f`, `3636301`):
 - **Reservation engine** `lib/scheduler/{client,policy,types,errors}.ts` — race-safe
@@ -140,16 +157,16 @@ These gate specific phases. Surface them to the human; do not guess.
 ### P4 — Auth & authorization
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | BLOCKED (Q2) |
-| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | BLOCKED (Q2) |
-| P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | BLOCKED (Q2) |
+| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | DONE (`961209f`, dev-bypass stub — `app/login/*`; real Firebase providers pending Q2) |
+| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | DONE (`961209f`, stub `verifyIdToken`/session cookie in `lib/auth/session.ts` + `middleware.ts` + `app/api/auth/session`; swap real Admin SDK when Q2 lands) |
+| P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | DONE (`961209f`, `lib/auth/guards.ts`; nav role type aligned to canonical `UserRole` `c648610`) |
 | P4.4 | Bootstrap first admin (§5 insert) once their UID is known. | main | P4.3, Q3 | BLOCKED (Q3) |
 
 ### P5 — UI: navigation & calendar
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P5.1 | Responsive app shell + menu bar (Calendar, Products, Add Reservation, Update Prices; admin: Categories, Users) collapsing to hamburger; hide admin entries for schedulers (server still enforces). | code-writer | P4.3 | TODO (nav shell can stub auth) |
-| P5.2 | Weekly calendar: 7 columns, multi-day spanning bars, cross-week `<`/`>` continuation indicators, confirmed vs block styling, greyed/omitted cancelled, prev/next/today, `+` button → Add Reservation. | code-writer | P3.1, P5.1 | TODO |
+| P5.1 | Responsive app shell + menu bar (Calendar, Products, Add Reservation, Update Prices; admin: Categories, Users) collapsing to hamburger; hide admin entries for schedulers (server still enforces). | code-writer | P4.3 | DONE (`e68274c`, `components/nav/*` role-aware shell) |
+| P5.2 | Weekly calendar: 7 columns, multi-day spanning bars, cross-week `<`/`>` continuation indicators, confirmed vs block styling, greyed/omitted cancelled, prev/next/today, `+` button → Add Reservation. | code-writer | P3.1, P5.1 | DONE (`a891d05`, `app/calendar/*` + `calendar-week` tests) |
 
 ### P6 — UI: reservations, products, prices, users
 | ID | Task | Owner | Depends | Status |
@@ -179,7 +196,7 @@ find and hoist.
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
 | P9.1 | ~~Obtain storefront repo (address from human)~~ + ~~decide the shared-code mechanism~~. Repo provided & verified: https://github.com/thedavidhanks/bcc-rentals-frontend (public, `main`). Mechanism chosen: **npm-workspaces monorepo package `@bcc/scheduler`**. Standing up the package + extraction is P9.2. | main | Q1 addr | DONE (2026-07-23 — repo confirmed reachable; mechanism = npm-workspaces `@bcc/scheduler`) |
-| P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | TODO |
+| P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | DONE (`809785a`, `packages/scheduler` = `@bcc/scheduler`; exports `scheduler/{errors,policy,types}` + `products/types`; consumed via workspaces + tsconfig paths, no build step) |
 | P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites. | code-writer | P9.2 | TODO |
 | P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers). | code-writer | P9.3 | TODO |
 
@@ -243,22 +260,30 @@ center's day-to-day productivity tooling can be handled in one signup.
 
 ## ▶ Next session — start here
 
-Context: P0–P3 are DONE and merged (foundation `7707a88`; wave 2 tip `90e1659`). The engine,
-recurrence, and repositories exist and are green. Pick up here.
+Context: P0–P5 + P9.1/P9.2 are DONE and merged (foundation `7707a88`; wave 2 tip `90e1659`;
+wave 3 tip `c648610`). Engine, recurrence, repositories, auth-on-stub, app shell, weekly
+calendar, and the `@bcc/scheduler` shared package all exist and are green (139/139). Pick up
+with the **P6 UI wave** — the CRUD screens that consume all of the above.
 
 **First: housekeeping**
 - `npm install` if `node_modules` is absent.
-- ~~Prune stale wave-2 branches~~ **DONE (2026-07-23)** — verified none exist locally or on
-  `origin` (only `refs/heads/master` + `refs/remotes/origin/master` remain); all content is on
-  `master`. Nothing to prune.
+- **Prune stale wave-3 branches** (all content is on `master` via `c648610`):
+  `code-writer/p4-auth`, `code-writer/p5.1-shell`, `code-writer/p5.2-calendar`,
+  `code-writer/p9.2-shared-pkg`, `integration/wave3`, and their `.claude/worktrees/agent-*`
+  worktrees (`git worktree remove` each, then `git branch -D`).
 
 **Delegate this wave now (unblocked):**
 | Task | What | Owner | Notes |
 |---|---|---|---|
-| P4.1–P4.3 (on stub) | Auth plumbing — middleware, session-cookie verify, UID→`app_users` role lookup, `requireScheduler`/`requireAdmin` — against the Q2 **dev-bypass stub** (`NODE_ENV !== 'production'`). Swap in real Firebase when Q2 lands. | code-writer | Unblocks the P5 shell/calendar; wire `writeAuditLog` into any mutating action. |
-| P5.1 | Responsive app shell + menu bar (stub auth OK). | code-writer | Depends on P4.3 guards existing (stub is fine). |
-| P5.2 | Weekly calendar (reads reservations via P3 repos). | code-writer | |
-| P9.2 | Stand up the `@bcc/scheduler` shared package; begin extracting the common surface. | code-writer | P9.1 DONE (repo confirmed reachable 2026-07-23; mechanism = npm-workspaces monorepo pkg). Sequenced now that engine/repos have landed. |
+| **P6.1** | **Add Reservation** — multi-product line items + recurrence controls; on submit run the race-safe check across all (item × occurrence), no partial commit. **The next task.** | code-writer | Deps P2.2, P2.4, P5.2 all DONE. The `+` button + `app/reservations/new` route stub already exist; wire in the engine + `writeAuditLog`. |
+| P6.3 | Update Prices — CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row. | code-writer | Deps P3.1 DONE. Independent of P6.1 — parallelizable. |
+| P6.4 | Products (admin) — Add/Edit (deactivate not delete, `updated_at=now()`, unique slug). | code-writer | Deps P3.1, P4.3 DONE. |
+| P6.5 | Categories (admin) — CRUD `categories` + assign via `item_categories`. | code-writer | Deps P3.1, P4.3 DONE. |
+| P6.6 | User management (admin) — CRUD `app_users`; guard last active admin. | code-writer | Deps P3.1, P4.3 DONE. |
+| P9.3→P9.4 | Refactor storefront **and** admin to import from `@bcc/scheduler`; remove duplicated copies; reconcile `TODO(P9)` markers; run both suites. | code-writer | Deps P9.2 DONE. Cross-repo (touches the storefront) — heavier; can trail the P6 wave. |
+
+Wire `writeAuditLog` into **every** mutating action in this wave (P3.2 writer exists).
+P6.2 (Edit Reservation) depends on P6.1; P6.7 (full-flow tests) trails the whole P6 wave.
 
 **Isolation reminder (learned the hard way in wave 2):** launch parallel `code-writer` agents
 with `isolation: "worktree"`. Wave 2 ran them in one shared tree and the branch labels
@@ -267,9 +292,10 @@ scrambled (recoverable, but avoidable). One shared tree = one branch pointer the
 **Model note:** `code-writer`/`test-engineer` are pinned to `claude-sonnet-4-5` (NOT enabled
 here) — pass `model: opus` when launching or they fail immediately.
 
-**Still blocked until the human provides answers** (see open-questions table): P4 real auth
-(Q2) + prod-admin bootstrap (Q3), P8 deploy (Q4 — new dedicated GCP project recommended).
-P7.1 (live-DB cross-system check) waits on the P6 booking UI.
+**Still blocked until the human provides answers** (see open-questions table): swapping the
+auth stub for **real Firebase** (Q2) + prod-admin bootstrap (Q3, P4.4); P8.3/P8.4 deploy
+(domain mapping + prod schema apply). `bcc-admin-prod` now exists (P10.4) so **P8.1 (deploy
+runbook) + P8.2 (deploy) are unblocked**. P7.1 (live-DB cross-system check) waits on P6.1.
 
 **Merge protocol reminder:** `git merge` requires human approval in this environment —
 code-writer builds/verifies on a branch and stops; a human runs the merge. For a multi-agent
@@ -399,5 +425,20 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   `code-writer/p3-repositories`, `integration/wave2`) are already gone (never persisted past their
   wave-2 worktrees/session). All content is on `master` (tip `2afcb2f`). Nothing to delete; marked
   the "Next session" housekeeping item DONE.
+- 2026-07-24 — **Wave 3 MERGED to `master` (tip `c648610`).** Human merged `integration/wave3`.
+  Four parallel `code-writer` branches (run with worktree isolation this time — no branch scramble):
+  **P4.1–P4.3** auth plumbing on the Q2 dev-bypass stub (`961209f` — `app/login/*`,
+  `lib/auth/*`, `middleware.ts`, `app/api/auth/session`; UID→`app_users` role lookup +
+  `requireScheduler`/`requireAdmin`), **P5.1** role-aware app shell (`e68274c` — `components/nav/*`),
+  **P5.2** weekly calendar (`a891d05` — `app/calendar/*`), **P9.2** `@bcc/scheduler` shared
+  workspace package (`809785a` — `packages/scheduler`, exports `scheduler/{errors,policy,types}` +
+  `products/types`, consumed via npm-workspaces + tsconfig paths, no build step). Integration fix
+  `c648610` aligned the nav role type to canonical `UserRole`. Verified on `master`:
+  `typecheck` clean, `npm test` **139/139 (12 files)**. Marked P4.1–P4.3, P5.1, P5.2, P9.2 DONE.
+  **NOTE:** P4 is on the **dev-bypass stub** (Q2 default) — real Firebase (providers + Admin SDK
+  `verifyIdToken`) still pending Q2; P4.4 still BLOCKED on Q3. **Next: the P6 UI wave** (P6.1 Add
+  Reservation is the immediate next task — all deps DONE), with P6.3/P6.4/P6.5/P6.6 parallelizable
+  and P9.3→P9.4 cross-repo consolidation trailing. Prune the stale wave-3 branches + `agent-*`
+  worktrees (all content is on `master`).
 </content>
 </invoke>
