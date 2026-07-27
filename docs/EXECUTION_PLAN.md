@@ -29,7 +29,19 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-07-24)
+## Current state (as of 2026-07-26)
+
+**Q2 (Firebase) answered for staging (2026-07-26).** `bcc-admin-staging` Web SDK config is
+in `.env.local`; launch sign-in methods = **Google + Email/Password**. Both halves of the
+real auth path are now implemented: **client** (`lib/auth/firebase-client.ts`, `firebase`
+installed) Google popup + `signInWithEmailPassword`, and **server** (`lib/auth/session.ts`,
+**P4.2 DONE**) real `firebase-admin` `verifyIdToken` → `createSessionCookie` →
+`verifySessionCookie` (ADC on Cloud Run; `GOOGLE_APPLICATION_CREDENTIALS` key only for local
+dev). `app/login/login-form.tsx` now renders Email/Password inputs + the Google button in the
+real path. `typecheck`/`lint` clean, `npm test` **141/141 (12 files)**, `build` exit 0. The
+only Q2 remainder is **P8.3** Authorized Domains at deploy time. (Not yet committed/merged.)
+
+
 
 **Foundation + reservation engine + repositories + auth plumbing + UI shell/calendar +
 shared package are built, verified, and merged to `master`** (foundation `7707a88`; wave 2
@@ -98,7 +110,7 @@ These gate specific phases. Surface them to the human; do not guess.
 | # | Question | Blocks | Default if unanswered |
 |---|---|---|---|
 | Q1 | ✅ **FULLY RESOLVED:** repo https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`, verified reachable 2026-07-23, tip `1074a9e`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Mechanism **decided**: npm-workspaces monorepo package `@bcc/scheduler`. Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
-| Q2 | **Firebase / Identity Platform project details**: project id, Web SDK config keys, and which social providers to enable (Google/GitHub/Facebook/Apple). Each needs its own OAuth app. | P4 | Cannot complete auth; stub a dev-only bypass gated behind `NODE_ENV !== 'production'` so other phases proceed. |
+| Q2 | ✅ **ANSWERED (2026-07-26, staging).** Firebase project **`bcc-admin-staging`** config supplied in `.env.local` (all `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` set; values never echoed). **Enabled sign-in methods for launch: Google + Email/Password** (GitHub/Facebook/Apple deferred). Both halves wired real: client (`lib/auth/firebase-client.ts`, `firebase`) + server Admin SDK (`lib/auth/session.ts`, **P4.2 DONE**, `firebase-admin`) + Email/Password inputs in `app/login`. **Only remaining before Q2 is fully closed:** Authorized Domains added at deploy = **P8.3**. Prod (`bcc-admin-prod`) Firebase config still to gather at deploy time. | P4 | ~~Cannot complete auth; stub dev-only bypass~~ — **resolved**; end-to-end real auth implemented (P8.3 authorized domains remain). |
 | Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
 | Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. Now largely superseded by **P10** — the org/project structure (`bcc-admin-prod` etc.) produces the concrete project ids the deploy needs. | P8, P10 | Deploy phase stays BLOCKED until P10.4 creates `bcc-admin-prod`. |
 | Q5 | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4. | P1.4 (apply) | ~~Write `schema.sql` as a file only~~ — resolved. |
@@ -157,8 +169,8 @@ These gate specific phases. Surface them to the human; do not guess.
 ### P4 — Auth & authorization
 | ID | Task | Owner | Depends | Status |
 |---|---|---|---|---|
-| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | DONE (`961209f`, dev-bypass stub — `app/login/*`; real Firebase providers pending Q2) |
-| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | DONE (`961209f`, stub `verifyIdToken`/session cookie in `lib/auth/session.ts` + `middleware.ts` + `app/api/auth/session`; swap real Admin SDK when Q2 lands) |
+| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | DONE (`961209f` stub) + **real client wired 2026-07-26** (`lib/auth/firebase-client.ts` — real Web SDK: `signInWithProvider` Google popup + `signInWithEmailPassword`; `firebase` installed) + **Email/Password inputs added to `app/login/login-form.tsx`** (real path now: email/password form + Google button). typecheck/lint clean. Not yet committed/merged. |
+| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | **DONE 2026-07-26** — real `firebase-admin` swapped into `lib/auth/session.ts`: `verifyIdToken(idToken, true)` → `createSessionCookie` (mint), `verifySessionCookie(value, true)` → identity (read; returns `null` on invalid/revoked). Cached `getAdminAuth()` uses ADC (Cloud Run runtime SA) or `GOOGLE_APPLICATION_CREDENTIALS` locally. `firebase-admin` installed; 4 real-path unit tests added (`tests/auth-session.test.ts`, admin mocked). Edge boundary preserved — `middleware.ts` stays cookie-presence-only. End-to-end real sign-in now complete (client P4.1 + this). Not yet committed/merged. |
 | P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | DONE (`961209f`, `lib/auth/guards.ts`; nav role type aligned to canonical `UserRole` `c648610`) |
 | P4.4 | Bootstrap first admin (§5 insert) once their UID is known. | main | P4.3, Q3 | BLOCKED (Q3) |
 
@@ -205,7 +217,7 @@ find and hoist.
 |---|---|---|---|---|
 | P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main | — | TODO |
 | P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | TODO (unblocked — `bcc-admin-prod` exists w/ billing+APIs+`run-runtime` SA; `DATABASE_URL` secret + accessor already granted. Needs P8.1 runbook.) |
-| P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4) |
+| P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4). NOTE (2026-07-26): **no Authorized Domain needed for local dev** — Firebase authorizes `localhost` by default, so real Google/Email-Password sign-in can be tested locally without deploying. The `*.run.app` URL (from P8.2) and later `admin.bachmancc.org` get added to Firebase **Authentication → Settings → Authorized domains** here, at deploy time. |
 | P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | BLOCKED |
 | P8.5 | Production smoke test (login per provider, create block, storefront reflects). | main | P8.4 | BLOCKED |
 
@@ -425,6 +437,44 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   `code-writer/p3-repositories`, `integration/wave2`) are already gone (never persisted past their
   wave-2 worktrees/session). All content is on `master` (tip `2afcb2f`). Nothing to delete; marked
   the "Next session" housekeeping item DONE.
+- 2026-07-26 — **Q2 answered (staging) — real Firebase client wired.** Human created the
+  Firebase/Identity Platform project **`bcc-admin-staging`**, registered a Web app, and put the
+  config in `.env.local` (all `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` present and
+  plausible — project id 17 chars, auth domain 33 chars = `bcc-admin-staging.firebaseapp.com`;
+  values never echoed into the session, per safety rails). **Enabled sign-in methods for launch:
+  Google + Email/Password** (GitHub/Facebook/Apple deferred — kept in `ProviderId` + commented in
+  `PROVIDERS`). Corrected `lib/auth/firebase-client.ts` (it had been hand-edited into an invalid
+  module — top-level imports mid-file, orphaned code) into a clean real Web SDK implementation:
+  lazy `getAuthClient()`, real `signInWithProvider("google")` popup, new
+  `signInWithEmailPassword(email, password)`; both return a fresh ID token. `npm i firebase`
+  (79 pkgs); `npm run typecheck` clean. **Applied to the MAIN workspace (`master`)**, not the
+  stale `agent-a0e46b61cf18ae37e` worktree (branch `code-writer/p4-auth`, flagged for pruning,
+  no `.env.local`). **Remaining to close Q2 fully:** (a) **P4.2** real Admin SDK server verify
+  (`npm i firebase-admin` + ADC) — the client gets a real ID token but `session.ts` still can't
+  verify it, so end-to-end login isn't complete yet; (b) add Email/Password inputs to
+  `app/login/login-form.tsx` (popup-buttons only today); (c) **P8.3** add `*.run.app` +
+  `admin.bachmancc.org` to Firebase Authorized Domains at deploy (localhost is auto-authorized,
+  so local testing needs no Cloud Run service). Prod (`bcc-admin-prod`) Firebase config still to
+  gather at deploy time. Q3 (bootstrap admin UID) unchanged — grab it from Firebase
+  Authentication → Users after the first real sign-in. Not yet committed/merged.
+- 2026-07-26 — **P4.2 DONE + login Email/Password UI — end-to-end real auth complete.**
+  Swapped the real `firebase-admin` Admin SDK into `lib/auth/session.ts`: `createRealSession`
+  calls `verifyIdToken(idToken, true)` (rejects revoked/invalid before minting) →
+  `createSessionCookie(idToken, { expiresIn: SESSION_MAX_AGE_SECONDS * 1000 })`;
+  `verifyRealSession` calls `verifySessionCookie(value, true)` and returns `{uid, email}` or
+  `null` on failure (mirrors the dev-cookie path). Lazy, cached `getAdminAuth()` initializes
+  via ADC (Cloud Run runtime SA) or `cert(GOOGLE_APPLICATION_CREDENTIALS)` locally. The auth
+  seam is preserved — dev-bypass stub and real path still coexist in this one module, and
+  `middleware.ts` (Edge) stays cookie-presence-only. Added Email/Password inputs to
+  `app/login/login-form.tsx` (real path now renders an email/password form + "or" divider +
+  Google button; dev-bypass role picker unchanged). Replaced the 2 obsolete
+  "throws AuthNotConfiguredError" tests with 4 real-path unit tests in `tests/auth-session.test.ts`
+  (firebase-admin mocked via `vi.doMock` so no live project / heavy cold import): mint verifies
+  then creates cookie, mint rejects invalid token, verify returns identity, verify returns null
+  on revoked. `npm i firebase-admin` (133 pkgs). **Verified on `master` working tree:**
+  `typecheck` + `lint` exit 0, `npm test` **141/141 (12 files)**, `npm run build` exit 0 (login
+  route 48.2 kB w/ Web SDK). Only Q2 remainder is **P8.3** Authorized Domains at deploy. Applied
+  to the MAIN workspace; **not yet committed/merged** (`git merge` is human-gated).
 - 2026-07-24 — **Wave 3 MERGED to `master` (tip `c648610`).** Human merged `integration/wave3`.
   Four parallel `code-writer` branches (run with worktree isolation this time — no branch scramble):
   **P4.1–P4.3** auth plumbing on the Q2 dev-bypass stub (`961209f` — `app/login/*`,

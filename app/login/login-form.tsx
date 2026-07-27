@@ -5,13 +5,14 @@ import { useState } from "react";
 import {
   PROVIDERS,
   signInWithProvider,
+  signInWithEmailPassword,
   type ProviderId,
 } from "@/lib/auth/firebase-client";
 import type { UserRole } from "@/lib/auth/types";
 
 // Client sign-in UI (execution-plan P4.1).
 //   • Dev-bypass mode: a role picker that mints a stub session (no Firebase).
-//   • Real mode: multi-provider buttons (Google/GitHub/Facebook/Apple) that get
+//   • Real mode: Email/Password form + provider buttons (Google today) that get
 //     a Firebase ID token and exchange it for a session cookie.
 // Both flows POST to /api/auth/session and then navigate into the app.
 
@@ -37,6 +38,8 @@ async function postSession(body: Record<string, unknown>): Promise<void> {
 export function LoginForm({ devBypass }: { devBypass: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -57,6 +60,13 @@ export function LoginForm({ devBypass }: { devBypass: boolean }) {
   function signInProvider(provider: ProviderId) {
     return run(async () => {
       const idToken = await signInWithProvider(provider);
+      await postSession({ idToken });
+    });
+  }
+
+  function signInEmail() {
+    return run(async () => {
+      const idToken = await signInWithEmailPassword(email, password);
       await postSession({ idToken });
     });
   }
@@ -89,17 +99,75 @@ export function LoginForm({ devBypass }: { devBypass: boolean }) {
           </div>
         </fieldset>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {PROVIDERS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              disabled={busy}
-              onClick={() => signInProvider(p.id)}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void signInEmail();
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+          >
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
             >
-              Continue with {p.label}
+              Email
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+            >
+              Password
+              <input
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <button type="submit" disabled={busy}>
+              Sign in
             </button>
-          ))}
+          </form>
+
+          {PROVIDERS.length > 0 ? (
+            <>
+              <div
+                aria-hidden
+                style={{ textAlign: "center", color: "#888", fontSize: "0.85rem" }}
+              >
+                or
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                }}
+              >
+                {PROVIDERS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => signInProvider(p.id)}
+                  >
+                    Continue with {p.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

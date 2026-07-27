@@ -27,13 +27,21 @@ is unchanged by anything here.
    `end > start`. Reservation `start_at`/`end_at` are `timestamptz` (real instants) —
    convert to Eastern only for display and hours validation.
 3. **Do not assume users have Google accounts.** Auth is Firebase Authentication / GCP
-   Identity Platform with multiple social providers (Google, GitHub, Facebook, Apple).
+   Identity Platform, provider-agnostic (Google, GitHub, Facebook, Apple, Email/Password).
    The Firebase **UID** is the durable account id; `app_users.role` in the DB is the
    canonical permission store. Verify tokens server-side; deny unknown users.
-   **Current state:** auth plumbing (`lib/auth/*`, `middleware.ts`, `app/login`,
-   `app/api/auth/session`) is wired on a **dev-bypass stub** (Q2 pending) — the UID→role
-   lookup and `requireScheduler`/`requireAdmin` guards are real; the token verify/providers
-   are stubbed and must be swapped for real Firebase when the Q2 project details land.
+   **Current state (Q2 answered 2026-07-26, staging):** Firebase config for project
+   **`bcc-admin-staging`** is in `.env.local` (`NEXT_PUBLIC_FIREBASE_*`); enabled sign-in
+   methods for launch are **Google + Email/Password** (GitHub/Facebook/Apple deferred —
+   re-add to `PROVIDERS` when their OAuth apps are registered). Both halves are now **real**:
+   the **client** (`lib/auth/firebase-client.ts` — real Web SDK; `firebase` installed) does
+   Google popup + `signInWithEmailPassword`, `app/login` renders Email/Password inputs + the
+   Google button, and the **server** (`lib/auth/session.ts`, **P4.2 done**; `firebase-admin`
+   installed) does real `verifyIdToken` → `createSessionCookie` → `verifySessionCookie` (ADC on
+   Cloud Run; `GOOGLE_APPLICATION_CREDENTIALS` key only for local dev). UID→role lookup and
+   `requireScheduler`/`requireAdmin` guards are real. The dev-bypass role picker still coexists
+   in the seam locally (`AUTH_DEV_BYPASS`; forced off in prod). Only remaining Q2 item: add
+   Authorized Domains at deploy (P8.3). End-to-end real sign-in works today against localhost.
 
 ## Architecture
 

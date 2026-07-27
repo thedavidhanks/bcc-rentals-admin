@@ -4,15 +4,44 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // control NODE_ENV / AUTH_DEV_BYPASS without real env vars, then dynamic-import
 // the module fresh (mirrors tests/env.test.ts).
 
+// session.ts imports firebase-admin (a heavy module tree). Always mock it in
+// unit tests: the dev-bypass path never touches it, and the real path only needs
+// the `getAuth()` return object. This also avoids a multi-second cold import.
+function mockFirebaseAdmin(admin: Record<string, unknown>) {
+  vi.doMock("firebase-admin/app", () => ({
+    getApps: () => [{}],
+    initializeApp: vi.fn(),
+    applicationDefault: vi.fn(),
+    cert: vi.fn(),
+  }));
+  vi.doMock("firebase-admin/auth", () => ({ getAuth: () => admin }));
+}
+
 async function loadSession(env: Record<string, string | undefined>) {
   vi.resetModules();
   vi.doMock("../lib/env", () => ({ env }));
+  mockFirebaseAdmin({});
+  return import("../lib/auth/session");
+}
+
+// Load the session module with firebase-admin's Auth mocked, for exercising the
+// real (non-dev-bypass) path without a live Firebase project. `admin` becomes
+// the object returned by `getAuth()`, so pass the Auth methods under test.
+async function loadSessionWithAdmin(
+  env: Record<string, string | undefined>,
+  admin: Record<string, unknown>,
+) {
+  vi.resetModules();
+  vi.doMock("../lib/env", () => ({ env }));
+  mockFirebaseAdmin(admin);
   return import("../lib/auth/session");
 }
 
 afterEach(() => {
   vi.resetModules();
   vi.doUnmock("../lib/env");
+  vi.doUnmock("firebase-admin/app");
+  vi.doUnmock("firebase-admin/auth");
 });
 
 describe("isDevBypassEnabled", () => {
@@ -102,21 +131,66 @@ describe("production safety", () => {
     );
   });
 
-  it("real path throws AuthNotConfiguredError until Q2 lands", async () => {
-    const { createSession, AuthNotConfiguredError } = await loadSession({
-      NODE_ENV: "production",
-    });
-    await expect(createSession({ idToken: "fake" })).rejects.toBeInstanceOf(
-      AuthNotConfiguredError,
+});
+
+describe("real Firebase path (P4.2, firebase-admin mocked)", () => {
+  it("createSession verifies the ID token then mints a session cookie", async () => {
+    const verifyIdToken = vi.fn().mockResolvedValue({ uid: "fb-1" });
+    const createSessionCookie = vi.fn().mockResolvedValue("fb.cookie.value");
+    const { createSession } = await loadSessionWithAdmin(
+      { NODE_ENV: "production", FIREBASE_PROJECT_ID: "bcc-admin-staging" },
+      { verifyIdToken, createSessionCookie },
     );
+
+    const minted = await createSession({ idToken: "id-token-abc" });
+
+    expect(verifyIdToken).toHaveBeenCalledWith("id-token-abc", true);
+    expect(createSessionCookie).toHaveBeenCalledWith("id-token-abc", {
+      expiresIn: expect.any(Number),
+    });
+    expect(minted.value).toBe("fb.cookie.value");
+    expect(minted.maxAgeSeconds).toBeGreaterThan(0);
   });
 
-  it("verifying a non-dev cookie throws until Q2 lands (real seam)", async () => {
-    const { verifySession, AuthNotConfiguredError } = await loadSession({
-      NODE_ENV: "production",
-    });
-    await expect(verifySession("firebase-session-cookie")).rejects.toBeInstanceOf(
-      AuthNotConfiguredError,
+  it("createSession rejects when the ID token is invalid", async () => {
+    const verifyIdToken = vi.fn().mockRejectedValue(new Error("token expired"));
+    const createSessionCookie = vi.fn();
+    const { createSession } = await loadSessionWithAdmin(
+      { NODE_ENV: "production", FIREBASE_PROJECT_ID: "bcc-admin-staging" },
+      { verifyIdToken, createSessionCookie },
     );
+
+    await expect(createSession({ idToken: "bad" })).rejects.toThrow(/expired/);
+    expect(createSessionCookie).not.toHaveBeenCalled();
+  });
+
+  it("verifySession returns the identity from a valid session cookie", async () => {
+    const verifySessionCookie = vi
+      .fn()
+      .mockResolvedValue({ uid: "fb-9", email: "staff@bachmancc.org" });
+    const { verifySession } = await loadSessionWithAdmin(
+      { NODE_ENV: "production", FIREBASE_PROJECT_ID: "bcc-admin-staging" },
+      { verifySessionCookie },
+    );
+
+    const identity = await verifySession("firebase-session-cookie");
+
+    expect(verifySessionCookie).toHaveBeenCalledWith(
+      "firebase-session-cookie",
+      true,
+    );
+    expect(identity).toEqual({ uid: "fb-9", email: "staff@bachmancc.org" });
+  });
+
+  it("verifySession returns null for an invalid/revoked session cookie", async () => {
+    const verifySessionCookie = vi
+      .fn()
+      .mockRejectedValue(new Error("cookie revoked"));
+    const { verifySession } = await loadSessionWithAdmin(
+      { NODE_ENV: "production", FIREBASE_PROJECT_ID: "bcc-admin-staging" },
+      { verifySessionCookie },
+    );
+
+    expect(await verifySession("stale-cookie")).toBeNull();
   });
 });

@@ -1,5 +1,14 @@
 import "server-only";
 
+import {
+  getApps,
+  initializeApp,
+  applicationDefault,
+  cert,
+  type App,
+} from "firebase-admin/app";
+import { getAuth, type Auth } from "firebase-admin/auth";
+
 import { env } from "../env";
 import { SESSION_MAX_AGE_SECONDS } from "./constants";
 import type { SessionIdentity, UserRole } from "./types";
@@ -10,27 +19,31 @@ import type { SessionIdentity, UserRole } from "./types";
 // This is the ONE module that owns "verify a login credential → mint a session
 // cookie → read/verify a session cookie". Everything else (middleware, guards,
 // route handlers) goes through `createSession()` / `verifySession()` here, so
-// swapping the dev-bypass stub for the real Firebase Admin SDK is a change to
+// the dev-bypass stub and the real Firebase Admin SDK live side by side in
 // THIS FILE ONLY.
 //
 // Two modes:
 //   • Dev-bypass  (NODE_ENV !== 'production' && AUTH_DEV_BYPASS !== 'off') —
 //     the login UI is a role picker; the session cookie is an unsigned, base64url
 //     JSON stub that carries { uid, email, role }. No Firebase project needed.
-//     This unblocks the rest of the app (P5 shell/calendar, P6 pages) while Q2
-//     (real Firebase project config) is outstanding.
+//     Handy for local work without hitting Firebase.
 //   • Real Firebase (always in production; opt-in locally with AUTH_DEV_BYPASS=off)
 //     — verify the client ID token with the Firebase Admin SDK and exchange it
 //     for a session cookie via createSessionCookie(); verify that cookie on read.
-//     Wired behind `getAdminAuth()` below; throws until Q2 lands.
+//     Implemented via getAdminAuth() below (P4.2, Q2 answered 2026-07-26).
+//
+// Runtime note: this module `import "server-only"` and pulls in firebase-admin,
+// so it runs on the Node runtime only (guards + the /api/auth/session route).
+// middleware.ts (Edge) must NOT import it — it does a cookie-presence check with
+// constants.ts only.
 // ---------------------------------------------------------------------------
 
-/** Thrown by the real Firebase path until the project config (Q2) is available. */
+/**
+ * Retained for callers that still reference it. The real path no longer throws
+ * this — a misconfigured Admin SDK surfaces firebase-admin's own init error.
+ */
 export class AuthNotConfiguredError extends Error {
-  constructor(
-    message = "Firebase Admin auth is not configured yet (Q2). The dev-bypass " +
-      "role picker is available while NODE_ENV !== 'production'.",
-  ) {
+  constructor(message = "Firebase Admin auth is not configured.") {
     super(message);
     this.name = "AuthNotConfiguredError";
   }
@@ -149,60 +162,59 @@ function decodeDevCookie(value: string): SessionIdentity | null {
 }
 
 // ---------------------------------------------------------------------------
-// Real Firebase Admin path (Q2 seam).
-//
-// When the Firebase project config lands: `npm i firebase-admin`, implement
-// getAdminAuth(), and the two functions below start working with no changes
-// elsewhere in the app.
+// Real Firebase Admin path (P4.2, Q2 answered 2026-07-26).
 // ---------------------------------------------------------------------------
 
+/**
+ * Verify the client ID token and exchange it for a Firebase session cookie.
+ * `verifyIdToken(..., true)` rejects revoked/invalid tokens before we mint the
+ * longer-lived cookie. Throws on an invalid token — the /api/auth/session route
+ * catches it and returns 401.
+ */
 async function createRealSession(idToken: string): Promise<MintedSession> {
   const auth = getAdminAuth();
-  // TODO(Q2): once getAdminAuth() returns a real Firebase Auth instance:
-  //   await auth.verifyIdToken(idToken, true); // reject revoked/invalid tokens
-  //   const value = await auth.createSessionCookie(idToken, {
-  //     expiresIn: SESSION_MAX_AGE_SECONDS * 1000,
-  //   });
-  //   return { value, maxAgeSeconds: SESSION_MAX_AGE_SECONDS };
-  void auth;
-  void idToken;
-  throw new AuthNotConfiguredError();
+  await auth.verifyIdToken(idToken, true);
+  const value = await auth.createSessionCookie(idToken, {
+    expiresIn: SESSION_MAX_AGE_SECONDS * 1000, // Firebase expects milliseconds
+  });
+  return { value, maxAgeSeconds: SESSION_MAX_AGE_SECONDS };
 }
 
+/**
+ * Verify a Firebase session cookie and return the caller's identity. Returns
+ * `null` (not throws) on an invalid/expired/revoked cookie so callers treat it
+ * as "not signed in" — mirrors the dev-cookie path. Role resolution is the
+ * guards' job (UID → app_users), not this module's.
+ */
 async function verifyRealSession(
   value: string,
 ): Promise<SessionIdentity | null> {
   const auth = getAdminAuth();
-  // TODO(Q2): once getAdminAuth() returns a real Firebase Auth instance:
-  //   const decoded = await auth.verifySessionCookie(value, true);
-  //   return { uid: decoded.uid, email: decoded.email ?? null };
-  void auth;
-  void value;
-  throw new AuthNotConfiguredError();
+  try {
+    const decoded = await auth.verifySessionCookie(value, /* checkRevoked */ true);
+    return { uid: decoded.uid, email: decoded.email ?? null };
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Returns the Firebase Admin `Auth` instance. Throws until Q2 lands.
- *
- * TODO(Q2): implement with the Admin SDK. On Cloud Run use Application Default
- * Credentials from the runtime service account (no key file); locally use
- * GOOGLE_APPLICATION_CREDENTIALS. Sketch:
- *
- *   import { getApps, initializeApp, applicationDefault, cert } from "firebase-admin/app";
- *   import { getAuth, type Auth } from "firebase-admin/auth";
- *   let cached: Auth | undefined;
- *   function getAdminAuth(): Auth {
- *     if (cached) return cached;
- *     const app = getApps()[0] ?? initializeApp({
- *       projectId: env.FIREBASE_PROJECT_ID,
- *       credential: env.GOOGLE_APPLICATION_CREDENTIALS
- *         ? cert(env.GOOGLE_APPLICATION_CREDENTIALS)
- *         : applicationDefault(),
- *     });
- *     cached = getAuth(app);
- *     return cached;
- *   }
+ * The Firebase Admin `Auth` instance, initialized once and cached. On Cloud Run
+ * use Application Default Credentials from the runtime service account (no key
+ * file); locally set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON.
  */
-function getAdminAuth(): never {
-  throw new AuthNotConfiguredError();
+let cachedAuth: Auth | undefined;
+
+function getAdminAuth(): Auth {
+  if (cachedAuth) return cachedAuth;
+  const app: App =
+    getApps()[0] ??
+    initializeApp({
+      projectId: env.FIREBASE_PROJECT_ID,
+      credential: env.GOOGLE_APPLICATION_CREDENTIALS
+        ? cert(env.GOOGLE_APPLICATION_CREDENTIALS)
+        : applicationDefault(),
+    });
+  cachedAuth = getAuth(app);
+  return cachedAuth;
 }
