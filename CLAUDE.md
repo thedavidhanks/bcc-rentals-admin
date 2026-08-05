@@ -27,13 +27,32 @@ is unchanged by anything here.
    `end > start`. Reservation `start_at`/`end_at` are `timestamptz` (real instants) —
    convert to Eastern only for display and hours validation.
 3. **Do not assume users have Google accounts.** Auth is Firebase Authentication / GCP
-   Identity Platform with multiple social providers (Google, GitHub, Facebook, Apple).
+   Identity Platform, provider-agnostic (Google, GitHub, Facebook, Apple, Email/Password).
    The Firebase **UID** is the durable account id; `app_users.role` in the DB is the
    canonical permission store. Verify tokens server-side; deny unknown users.
-   **Current state:** auth plumbing (`lib/auth/*`, `middleware.ts`, `app/login`,
-   `app/api/auth/session`) is wired on a **dev-bypass stub** (Q2 pending) — the UID→role
-   lookup and `requireScheduler`/`requireAdmin` guards are real; the token verify/providers
-   are stubbed and must be swapped for real Firebase when the Q2 project details land.
+   **Current state (Q2 answered 2026-07-26, staging):** Firebase config for project
+   **`bcc-admin-staging`** is in `.env.local` (`NEXT_PUBLIC_FIREBASE_*`); enabled sign-in
+   methods for launch are **Google + Email/Password** (GitHub/Facebook/Apple deferred —
+   re-add to `PROVIDERS` when their OAuth apps are registered). Both halves are now **real**:
+   the **client** (`lib/auth/firebase-client.ts` — real Web SDK; `firebase` installed) does
+   Google popup + `signInWithEmailPassword`, `app/login` renders Email/Password inputs + the
+   Google button, and the **server** (`lib/auth/session.ts`, **P4.2 done**; `firebase-admin`
+   installed) does real `verifyIdToken` → `createSessionCookie` → `verifySessionCookie` (ADC on
+   Cloud Run; `GOOGLE_APPLICATION_CREDENTIALS` key only for local dev). UID→role lookup and
+   `requireScheduler`/`requireAdmin` guards are real. The dev-bypass role picker still coexists
+   in the seam locally (`AUTH_DEV_BYPASS`; forced off in prod). Only remaining Q2 item: add
+   Authorized Domains at deploy (P8.3). End-to-end real sign-in works today against localhost.
+   **First admin bootstrapped (Q3, 2026-08-05):** a `role=admin` row exists in the **prod**
+   `app_users`. One follow-up in flight (see EXECUTION_PLAN P4.4/P8.4): the interim admin is a
+   Gmail identity (`dphanks@gmail.com`) being **swapped for a `@bachmancc.org` identity** — the
+   replacement Firebase user already exists in `bcc-admin-staging`
+   (`uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `dhanks@bachmancc.org`); the idempotent swap SQL (upsert
+   new + delete Gmail row) is the last step, followed by a prod sign-in before
+   `ALLOWED_EMAIL_DOMAIN=bachmancc.org` is set (a Gmail admin is locked out the moment that guard
+   is enabled). Note the running app authorizes against `DATABASE_URL` only (never `DATABASE_URL_DEV`),
+   and local `.env.local` `DATABASE_URL` points at **prod** — so local sign-in works via
+   `bcc-admin-staging` + prod roles with no deploy. The **dev** branch has **0** `app_users`; only
+   add an admin there if `DATABASE_URL` is later repointed at dev for local development.
 
 ## Architecture
 
@@ -45,7 +64,12 @@ is unchanged by anything here.
   re-duplicate it. Consolidating the remaining `TODO(P9)` copies is P9.3/P9.4.
 - **DB:** the storefront's Neon Postgres. Runtime uses the **pooled** endpoint
   (`DATABASE_URL`); `DATABASE_URL_DEV` is for one-off DDL/tooling only. Access via `pg`
-  `Pool`; wrap multi-statement writes in a transaction.
+  `Pool`; wrap multi-statement writes in a transaction. **Dev-branch-first still holds** —
+  the Neon **dev** branch is live and carries the full §5 schema (verified 2026-08-05; it did
+  **not** auto-delete). The **prod** branch also has the §5 schema now (P8.4). Note the apply
+  script (`scripts/db/apply-schema.mjs`) **prefers `DATABASE_URL_DEV` whenever it is set**, so
+  targeting prod requires clearing it for that one call:
+  `DATABASE_URL_DEV= APPLY_TO_PROD=1 npm run db:apply`.
 - **Auth model on Cloud Run:** `--allow-unauthenticated` at the platform layer; the
   **app** is the gate (Firebase verify in middleware → `app_users` lookup authorizes).
 - **Roles:** `scheduler` (calendar, reservations, prices) and `admin` (all that + products,
