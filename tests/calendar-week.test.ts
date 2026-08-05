@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWeekDays,
   easternDayNumber,
+  easternInstant,
   easternMidnightInstant,
   easternYmd,
   nextWeekIso,
@@ -60,6 +61,71 @@ describe("easternMidnightInstant", () => {
   it("round-trips: the midnight instant maps back to the same Eastern day", () => {
     const dn = daysFromCivil(2026, 3, 9); // day after US spring-forward
     expect(easternDayNumber(easternMidnightInstant(dn))).toBe(dn);
+  });
+});
+
+describe("easternInstant (Eastern civil date + minutes → real instant)", () => {
+  it("converts a summer (EDT, -04:00) wall-clock time correctly", () => {
+    // 2026-08-02 09:00 America/New_York (EDT) = 13:00 UTC.
+    const inst = easternInstant("2026-08-02", 9 * 60);
+    expect(inst.toISOString()).toBe("2026-08-02T13:00:00.000Z");
+  });
+
+  it("converts a winter (EST, -05:00) wall-clock time correctly", () => {
+    // 2026-01-15 09:00 America/New_York (EST) = 14:00 UTC.
+    const inst = easternInstant("2026-01-15", 9 * 60);
+    expect(inst.toISOString()).toBe("2026-01-15T14:00:00.000Z");
+  });
+
+  it("accepts a day number as well as a YYYY-MM-DD string", () => {
+    const byString = easternInstant("2026-08-02", 9 * 60);
+    const byNumber = easternInstant(daysFromCivil(2026, 8, 2), 9 * 60);
+    expect(byNumber.toISOString()).toBe(byString.toISOString());
+  });
+
+  it("agrees with easternMidnightInstant at 00:00", () => {
+    const dn = daysFromCivil(2026, 8, 2);
+    expect(easternInstant(dn, 0).toISOString()).toBe(
+      easternMidnightInstant(dn).toISOString(),
+    );
+  });
+
+  // ---- DST boundary: SPRING-FORWARD (2026-03-08, 02:00 EST → 03:00 EDT) ----
+  it("is offset-correct straddling spring-forward (would be wrong via midnight+ms)", () => {
+    // Before the 02:00 gap: 01:30 EST (-05:00) = 06:30 UTC.
+    expect(easternInstant("2026-03-08", 1 * 60 + 30).toISOString()).toBe(
+      "2026-03-08T06:30:00.000Z",
+    );
+    // After the gap: 09:00 EDT (-04:00) = 13:00 UTC. The naive
+    // "midnight instant + 9h" would give 14:00Z (using the pre-transition
+    // -05:00 offset), i.e. one hour off — this must be 13:00Z.
+    const afterGap = easternInstant("2026-03-08", 9 * 60);
+    expect(afterGap.toISOString()).toBe("2026-03-08T13:00:00.000Z");
+
+    const naiveWrong = new Date(
+      easternMidnightInstant(daysFromCivil(2026, 3, 8)).getTime() + 9 * 60 * 60_000,
+    );
+    expect(naiveWrong.toISOString()).toBe("2026-03-08T14:00:00.000Z");
+    expect(afterGap.toISOString()).not.toBe(naiveWrong.toISOString());
+  });
+
+  // ---- DST boundary: FALL-BACK (2026-11-01, 02:00 EDT → 01:00 EST) ----
+  it("is offset-correct straddling fall-back", () => {
+    // Before the fall-back at 02:00: 00:30 EDT (-04:00) = 04:30 UTC.
+    expect(easternInstant("2026-11-01", 30).toISOString()).toBe(
+      "2026-11-01T04:30:00.000Z",
+    );
+    // After fall-back: 09:00 EST (-05:00) = 14:00 UTC.
+    const afterFallback = easternInstant("2026-11-01", 9 * 60);
+    expect(afterFallback.toISOString()).toBe("2026-11-01T14:00:00.000Z");
+
+    // A whole 24h day (fall-back) is 25 real hours: midnight+9h via ms would use
+    // the -04:00 offset and give 13:00Z, one hour off the correct 14:00Z.
+    const naiveWrong = new Date(
+      easternMidnightInstant(daysFromCivil(2026, 11, 1)).getTime() + 9 * 60 * 60_000,
+    );
+    expect(naiveWrong.toISOString()).toBe("2026-11-01T13:00:00.000Z");
+    expect(afterFallback.toISOString()).not.toBe(naiveWrong.toISOString());
   });
 });
 

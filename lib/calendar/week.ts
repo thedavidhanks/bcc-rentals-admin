@@ -138,6 +138,43 @@ export function easternMidnightInstant(dayNumber: number): Date {
   return new Date(utcGuess - offset * 60_000);
 }
 
+/**
+ * The real instant of an Eastern wall-clock time given as (civil date,
+ * minutes-since-local-midnight). This is the correct way to turn the admin
+ * booking domain — a civil Eastern date + minutes since midnight (spec §2) —
+ * into a `timestamptz` instant.
+ *
+ * Why not `easternMidnightInstant(day) + minutes*60000`: that is wrong across
+ * the spring-forward Sunday. Eastern shifts UTC−05:00 → UTC−04:00 at 02:00
+ * local, so the calendar day is not a uniform 24 hours (it is 23h that day, and
+ * 25h on fall-back). Adding raw milliseconds to midnight ignores that the offset
+ * an hour later differs, landing on the wrong instant for any wall-clock time at
+ * or past the transition.
+ *
+ * Instead we mirror `easternMidnightInstant`'s offset-correction technique but
+ * evaluate the offset at the requested wall-clock time: form the UTC "guess" for
+ * that exact wall-clock (as if it were UTC), read Eastern's offset at the guess,
+ * and correct once. Because the offset at the guess equals the offset actually in
+ * effect at that wall-clock time (except within the one nonexistent spring-forward
+ * hour, where either offset yields the standard forward-shift resolution), a
+ * single correction is exact.
+ *
+ * @param dateOrDayNumber a civil day number (days since 1970-01-01) OR a
+ *        `YYYY-MM-DD` Eastern civil date string.
+ * @param minutes minutes since Eastern local midnight (0..1440).
+ */
+export function easternInstant(dateOrDayNumber: number | string, minutes: number): Date {
+  const dayNumber =
+    typeof dateOrDayNumber === "number"
+      ? dateOrDayNumber
+      : parseDateToDays(dateOrDayNumber, "date");
+  const { y, m, d } = civilFromDays(dayNumber);
+  // The requested wall-clock time expressed as if it were UTC.
+  const utcGuess = Date.UTC(y, m - 1, d, 0, 0, 0) + minutes * 60_000;
+  const offset = zoneOffsetMinutes(new Date(utcGuess));
+  return new Date(utcGuess - offset * 60_000);
+}
+
 // ---------------------------------------------------------------------------
 // Week construction
 // ---------------------------------------------------------------------------

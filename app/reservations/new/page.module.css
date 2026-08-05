@@ -1,0 +1,250 @@
+.page {
+  font-family: system-ui, sans-serif;
+  padding: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.navBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.navBtn:hover {
+  background: #f2f2f2;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.section {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 0;
+}
+
+.section legend {
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0 0.4rem;
+  color: #333;
+}
+
+.lineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.lineRow:last-of-type {
+  border-bottom: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #444;
+}
+
+.field span {
+  font-weight: 500;
+}
+
+.field select,
+.field input,
+.field textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+}
+
+.qtyInput {
+  width: 5rem;
+}
+
+.removeBtn {
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 6px;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  color: #912d2b;
+  font-size: 0.9rem;
+}
+
+.removeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.addRowBtn,
+.submitBtn {
+  border: 1px solid #1a5fb4;
+  background: #1a5fb4;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.75rem;
+  align-self: flex-start;
+}
+
+.addRowBtn:hover,
+.submitBtn:hover {
+  background: #164e97;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #333;
+  margin: 0.35rem 0;
+}
+
+.recurrenceControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.weekdays legend {
+  font-size: 0.8rem;
+  color: #555;
+  padding: 0 0.3rem;
+}
+
+.weekdayItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.endCondition {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.notesField {
+  margin-top: 0.75rem;
+}
+
+.notesField textarea {
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.actions .submitBtn {
+  margin-top: 0;
+}
+
+.fieldError {
+  color: #912d2b;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
+}
+
+.error {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0b4b4;
+  background: #fdf0f0;
+  color: #912d2b;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.conflictBox {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0b4b4;
+  background: #fdf0f0;
+  color: #912d2b;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.conflictBox ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.warning {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0c94b;
+  background: #fdf9e3;
+  color: #6b5900;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}

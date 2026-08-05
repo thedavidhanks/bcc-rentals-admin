@@ -212,10 +212,19 @@ export const scheduler = {
    * capacity is exhausted. The window is widened by the item's buffer_minutes
    * (or the bufferMinutes override).
    */
-  async createReservation(input: CreateReservationInput): Promise<Reservation> {
+  async createReservation(
+    input: CreateReservationInput,
+    // TODO(P9): consolidate — the optional transaction client is an admin-only
+    // extension of the storefront's createReservation so the Add Reservation
+    // action (P6.1) can commit the reservation, its reservation_series row, and
+    // the audit-log row in ONE transaction. When no client is passed the behavior
+    // is identical to the storefront's (opens its own withTransaction). The
+    // lock/recheck/insert SQL is unchanged.
+    client?: PoolClient,
+  ): Promise<Reservation> {
     const data = createReservationInputSchema.parse(input);
 
-    return withTransaction(async (client) => {
+    const run = async (client: PoolClient): Promise<Reservation> => {
       // 1. Serialize all writers for this item until commit/rollback.
       await lockItem(client, data.itemSlug);
 
@@ -262,7 +271,11 @@ export const scheduler = {
         seriesId: data.seriesId,
       });
       return mapReservation(row, data.itemSlug);
-    });
+    };
+
+    // Reuse the caller's transaction client when given (atomic with sibling
+    // writes); otherwise open our own transaction exactly as before.
+    return client ? run(client) : withTransaction(run);
   },
 
   /**
@@ -277,7 +290,15 @@ export const scheduler = {
    *      occurrence and its reservations rows. Any failure throws
    *      GroupBookingConflictError and the transaction rolls back (nothing commits).
    */
-  async createBooking(input: CreateBookingInput): Promise<BookingResult> {
+  async createBooking(
+    input: CreateBookingInput,
+    // TODO(P9): consolidate — admin-only optional transaction client (see
+    // createReservation above). Lets the Add Reservation action (P6.1) commit the
+    // series row, all reservation rows, and the audit-log row atomically. When
+    // omitted, behavior is identical to before (opens its own withTransaction).
+    // The per-item lock/recheck/insert SQL is byte-for-byte unchanged.
+    client?: PoolClient,
+  ): Promise<BookingResult> {
     const data = createBookingInputSchema.parse(input);
 
     // Flatten every line across every group, tagged with its group for reporting.
@@ -298,7 +319,7 @@ export const scheduler = {
       }));
     });
 
-    return withTransaction(async (client) => {
+    const run = async (client: PoolClient): Promise<BookingResult> => {
       // 1. Lock every distinct item in stable (ascending) slug order.
       const distinctSlugs = [...new Set(flat.map((l) => l.itemSlug))].sort();
       for (const slug of distinctSlugs) {
@@ -414,7 +435,11 @@ export const scheduler = {
         groups,
         reservationCount: groups.reduce((n, g) => n + g.reservations.length, 0),
       };
-    });
+    };
+
+    // Reuse the caller's transaction client when given (atomic with sibling
+    // writes); otherwise open our own transaction exactly as before.
+    return client ? run(client) : withTransaction(run);
   },
 
   /** Fetches a reservation by id, or null if not found (or id isn't a uuid). */
