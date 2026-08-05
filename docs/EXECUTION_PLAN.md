@@ -34,6 +34,7 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 **Q3 answered + first admin bootstrapped against PROD; P4.4 DONE (2026-08-05).** The human
 signed in once, created the first admin, and completed the `@bachmancc.org` re-bootstrap.
 **Verified live 2026-08-05:**
+
 1. **Prod schema is COMPLETE.** ✅ All §5 objects present on the Neon **prod** branch
    (`DATABASE_URL`): `app_users`, `reservation_groups`, `reservation_series`, `admin_audit_log`,
    and `reservations.group_id`/`series_id`. (Applied via PgAdmin directly against prod; the full
@@ -53,14 +54,15 @@ it is alive (`DATABASE_URL_DEV` connects) and carries the **complete** §5 schem
 rows. **DDL/tooling should stay dev-branch-first.**
 
 **Auth vs. authorization — two independent axes (don't conflate them):**
-- **Firebase project** *authenticates* (issues the UID). `.env.local` uses `bcc-admin-staging` for
+
+- **Firebase project** _authenticates_ (issues the UID). `.env.local` uses `bcc-admin-staging` for
   both the client and Admin SDK. `localhost` is auto-authorized, so real sign-in works locally
   with no deploy.
-- **Neon DB (`DATABASE_URL`)** *authorizes* (UID → role lookup). **The running app only ever uses
+- **Neon DB (`DATABASE_URL`)** _authorizes_ (UID → role lookup). **The running app only ever uses
   `DATABASE_URL`; it never touches `DATABASE_URL_DEV`** (that var is for one-off DDL/tooling only).
 - **Current local reality:** `.env.local`'s `DATABASE_URL` points at the **prod** branch. So the
   app locally signs in via `bcc-admin-staging` and reads roles from **prod** — the same DB the swap
-  SQL writes to. That's why the admin can sign in locally *today* without any dev-branch `app_users`
+  SQL writes to. That's why the admin can sign in locally _today_ without any dev-branch `app_users`
   row. Adding the admin UID to the **dev** branch is **only** needed if `DATABASE_URL` is later
   repointed at the dev branch for local development.
 
@@ -74,8 +76,6 @@ dev). `app/login/login-form.tsx` now renders Email/Password inputs + the Google 
 real path. `typecheck`/`lint` clean, `npm test` **141/141 (12 files)**, `build` exit 0. The
 only Q2 remainder is **P8.3** Authorized Domains at deploy time. (Not yet committed/merged.)
 
-
-
 **Foundation + reservation engine + repositories + auth plumbing + UI shell/calendar +
 shared package are built, verified, and merged to `master`** (foundation `7707a88`; wave 2
 tip `90e1659`; **wave 3 merged, tip `c648610`**). Working tree clean. `npm run typecheck`
@@ -83,6 +83,7 @@ is clean and `npm test` is **139/139 green** (12 files). Neon **dev** branch has
 schema applied (P1.5).
 
 Landed in wave 3 (`961209f`, `a891d05`, `e68274c`, `809785a`, `c648610`):
+
 - **Auth plumbing (P4.1–P4.3)** on the Q2 **dev-bypass stub** — `app/login/*` sign-in UI,
   `lib/auth/{session,guards,firebase-client,types,constants}.ts`, `middleware.ts`,
   `app/api/auth/session`. UID→`app_users` role lookup + `requireScheduler`/`requireAdmin`
@@ -99,6 +100,7 @@ Landed in wave 3 (`961209f`, `a891d05`, `e68274c`, `809785a`, `c648610`):
   (mocked `pg`); no live-DB integration test yet (see P7.1).
 
 Landed in wave 2 (`0509643`, `4f7f11f`, `3636301`):
+
 - **Reservation engine** `lib/scheduler/{client,policy,types,errors}.ts` — race-safe
   single-item write (advisory lock → capacity recheck → insert), multi-item/multi-occurrence
   all-or-nothing booking (stable slug-order locks), Eastern policy helpers with staff-block
@@ -110,6 +112,7 @@ Landed in wave 2 (`0509643`, `4f7f11f`, `3636301`):
 - **Tests** — 92 unit tests (mocked `pg`); no live-DB integration test yet (see P7.1).
 
 Present in the repo now:
+
 - **App scaffold:** Next.js (App Router) + TypeScript, `next.config.ts` with
   `output: 'standalone'`, strict TS, ESLint, `vitest`. `package.json` scripts: `dev`,
   `build`, `start`, `lint`, `typecheck`, `test`, `db:apply`. Placeholder `app/page.tsx`.
@@ -124,12 +127,14 @@ Present in the repo now:
 - Git initialized; `.env.local` (live prod secrets) is git-ignored.
 
 Still storefront-inherited / needs work later:
+
 - [DEPLOY_CLOUD_RUN.md](./DEPLOY_CLOUD_RUN.md) is the **storefront's** runbook (PayPal
   build args, storefront domain). Adapt for admin (Firebase build vars,
   `admin.bachmancc.org`, no PayPal) — tracked as `P8.1`.
 - Toolchain: Node v22.16, npm 10.9.
 
 Reconcile-later flags (from building without the storefront source — see P9):
+
 - `lib/db.ts` SSL uses `{ rejectUnauthorized: false }` for Neon — confirm vs storefront.
 - `lib/env.ts` + `lib/public-env.ts` split is our interpretation, not a copy.
 - `withTransaction` shape follows spec prose, not the real `lib/scheduler/db.ts`.
@@ -140,13 +145,13 @@ Reconcile-later flags (from building without the storefront source — see P9):
 
 These gate specific phases. Surface them to the human; do not guess.
 
-| # | Question | Blocks | Default if unanswered |
-|---|---|---|---|
-| Q1 | ✅ **FULLY RESOLVED:** repo https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`, verified reachable 2026-07-23, tip `1074a9e`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Mechanism **decided**: npm-workspaces monorepo package `@bcc/scheduler`. Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
-| Q2 | ✅ **ANSWERED (2026-07-26, staging).** Firebase project **`bcc-admin-staging`** config supplied in `.env.local` (all `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` set; values never echoed). **Enabled sign-in methods for launch: Google + Email/Password** (GitHub/Facebook/Apple deferred). Both halves wired real: client (`lib/auth/firebase-client.ts`, `firebase`) + server Admin SDK (`lib/auth/session.ts`, **P4.2 DONE**, `firebase-admin`) + Email/Password inputs in `app/login`. **Only remaining before Q2 is fully closed:** Authorized Domains added at deploy = **P8.3**. Prod (`bcc-admin-prod`) Firebase config still to gather at deploy time. | P4 | ~~Cannot complete auth; stub dev-only bypass~~ — **resolved**; end-to-end real auth implemented (P8.3 authorized domains remain). |
-| Q3 | ✅ **FULLY RESOLVED (2026-08-05).** First admin signed in via `bcc-admin-staging`; UID captured and inserted into prod `app_users`. Interim Gmail identity (`dphanks@gmail.com`) **swapped** for the `@bachmancc.org` admin (`uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `dhanks@bachmancc.org`) — verified live: prod holds exactly 1 admin row, local sign-in confirmed, `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. P4.4 DONE. | P4.4 | ~~Defer~~ — resolved (UID known, admin bootstrapped). |
-| Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. Now largely superseded by **P10** — the org/project structure (`bcc-admin-prod` etc.) produces the concrete project ids the deploy needs. | P8, P10 | Deploy phase stays BLOCKED until P10.4 creates `bcc-admin-prod`. |
-| Q5 | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4. | P1.4 (apply) | ~~Write `schema.sql` as a file only~~ — resolved. |
+| #   | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Blocks               | Default if unanswered                                                                                                                                       |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1  | ✅ **FULLY RESOLVED:** repo https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`, verified reachable 2026-07-23, tip `1074a9e`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Mechanism **decided**: npm-workspaces monorepo package `@bcc/scheduler`. Copy verbatim from the storefront in the interim if consolidation lags.                                                                                                                                                                                                     | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
+| Q2  | ✅ **ANSWERED (2026-07-26, staging).** Firebase project **`bcc-admin-staging`** config supplied in `.env.local` (all `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` set; values never echoed). **Enabled sign-in methods for launch: Google + Email/Password** (GitHub/Facebook/Apple deferred). Both halves wired real: client (`lib/auth/firebase-client.ts`, `firebase`) + server Admin SDK (`lib/auth/session.ts`, **P4.2 DONE**, `firebase-admin`) + Email/Password inputs in `app/login`. **Only remaining before Q2 is fully closed:** Authorized Domains added at deploy = **P8.3**. Prod (`bcc-admin-prod`) Firebase config still to gather at deploy time. | P4                   | ~~Cannot complete auth; stub dev-only bypass~~ — **resolved**; end-to-end real auth implemented (P8.3 authorized domains remain).                           |
+| Q3  | ✅ **FULLY RESOLVED (2026-08-05).** First admin signed in via `bcc-admin-staging`; UID captured and inserted into prod `app_users`. Interim Gmail identity (`dphanks@gmail.com`) **swapped** for the `@bachmancc.org` admin (`uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `dhanks@bachmancc.org`) — verified live: prod holds exactly 1 admin row, local sign-in confirmed, `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. P4.4 DONE.                                                                                                                                                                                                                                                | P4.4                 | ~~Defer~~ — resolved (UID known, admin bootstrapped).                                                                                                       |
+| Q4  | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. Now largely superseded by **P10** — the org/project structure (`bcc-admin-prod` etc.) produces the concrete project ids the deploy needs.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | P8, P10              | Deploy phase stays BLOCKED until P10.4 creates `bcc-admin-prod`.                                                                                            |
+| Q5  | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | P1.4 (apply)         | ~~Write `schema.sql` as a file only~~ — resolved.                                                                                                           |
 
 ---
 
@@ -156,8 +161,8 @@ These gate specific phases. Surface them to the human; do not guess.
   reservation write MUST use the per-item advisory-lock + capacity-recheck pattern in
   spec §8, inside one transaction, locks acquired in stable slug order.
 - **No agent runs DDL against the shared DB or deploys** without explicit human
-  approval in-session. Agents may *write* `schema.sql` and the apply script; a human
-  (or `main` with go-ahead) *runs* it, against the **dev branch** first.
+  approval in-session. Agents may _write_ `schema.sql` and the apply script; a human
+  (or `main` with go-ahead) _runs_ it, against the **dev branch** first.
 - All new schema is idempotent (`IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`).
 - Money = integer cents. Time = minutes since local midnight, `America/New_York`.
   Reservation instants = `timestamptz`. No floats, no stored UTC offsets.
@@ -169,67 +174,76 @@ These gate specific phases. Surface them to the human; do not guess.
 ## Phases
 
 ### P0 — Repo & tooling foundation
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main | — | DONE |
-| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict. | code-writer | P0.1 | DONE (`7707a88`) |
-| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal). | code-writer | P0.2 | DONE (`7707a88`) |
+
+| ID   | Task                                                                                                                   | Owner       | Depends | Status           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------- | ------- | ---------------- |
+| P0.1 | `git init`, add `.gitignore` (node, `.env*`, `.next`, `node_modules`), initial commit. Enables branch-isolated agents. | main        | —       | DONE             |
+| P0.2 | Scaffold Next.js (App Router) + TypeScript; `next.config.ts` with `output: 'standalone'`; ESLint/TS strict.            | code-writer | P0.1    | DONE (`7707a88`) |
+| P0.3 | Add `Dockerfile` + `.dockerignore` for standalone build (adapt storefront's; no PayPal).                               | code-writer | P0.2    | DONE (`7707a88`) |
 
 ### P1 — Data layer & config
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`. | code-writer | P0.2 | DONE (`7707a88`; `TODO(P9)`: reconcile SSL + shape vs storefront) |
-| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`. | code-writer | P0.2 | DONE (`7707a88`; split: `lib/env.ts` server + `lib/public-env.ts` client) |
-| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`. | code-writer | — | DONE (`7707a88`) |
-| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1 | DONE (`7707a88`; apply refuses prod unless `APPLY_TO_PROD=1`) |
-| P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes. | main | P1.4, Q5 | DONE (2026-07-20; verified: app_users, reservation_groups, reservation_series, admin_audit_log + reservations.group_id/series_id + indexes) |
+
+| ID   | Task                                                                                                                                                                                | Owner       | Depends  | Status                                                                                                                                      |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1.1 | `lib/db.ts`: `pg` `Pool` (`getPool()`) + `withTransaction()` (mirror storefront `lib/scheduler/db.ts`). `import "server-only"`.                                                     | code-writer | P0.2     | DONE (`7707a88`; `TODO(P9)`: reconcile SSL + shape vs storefront)                                                                           |
+| P1.2 | `lib/env.ts`: Zod validation of §11 vars; **fail-fast at boot**. `import "server-only"`.                                                                                            | code-writer | P0.2     | DONE (`7707a88`; split: `lib/env.ts` server + `lib/public-env.ts` client)                                                                   |
+| P1.3 | Rewrite `.env.local.example` to the admin var set (§11): drop PayPal/Resend/Upstash; add `NEXT_PUBLIC_FIREBASE_*`, `FIREBASE_PROJECT_ID`, `ALLOWED_EMAIL_DOMAIN`.                   | code-writer | —        | DONE (`7707a88`)                                                                                                                            |
+| P1.4 | `db/schema.sql` (§5, correct FK ordering: series → groups → alter reservations → audit) + `scripts/db/apply-schema.mjs` (mirror storefront). **File only — do not apply** (see Q5). | code-writer | P1.1     | DONE (`7707a88`; apply refuses prod unless `APPLY_TO_PROD=1`)                                                                               |
+| P1.5 | Apply `schema.sql` to Neon **dev** branch, verify tables/columns/indexes.                                                                                                           | main        | P1.4, Q5 | DONE (2026-07-20; verified: app_users, reservation_groups, reservation_series, admin_audit_log + reservations.group_id/series_id + indexes) |
 
 ### P2 — Reservation engine (race-safe core)
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8). | code-writer | P1.1, Q1 | DONE (`4f7f11f`, merged to `master` ff `90e1659`) |
-| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date). | code-writer | P2.1 | DONE (`4f7f11f`) |
-| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer | P2.1 | DONE (`4f7f11f`) |
-| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation. | code-writer | — | DONE (`3636301`) |
-| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges. | test-engineer | P2.1–P2.4 | DONE — covered by the code-writers' own suites (scheduler-policy/client/booking + recurrence); 92/92 green on `master`. NOTE: all unit-level (mocked `pg`); no live-DB integration test yet (P7.1). |
+
+| ID   | Task                                                                                                                                                            | Owner         | Depends   | Status                                                                                                                                                                                              |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P2.1 | Port/implement race-safe single-item write: advisory lock → buffered overlap capacity recheck → insert `status='block'`, in one txn (spec §8).                  | code-writer   | P1.1, Q1  | DONE (`4f7f11f`, merged to `master` ff `90e1659`)                                                                                                                                                   |
+| P2.2 | Multi-item / multi-occurrence booking: one txn, stable-order locks, all-or-nothing, report failing (item × date).                                               | code-writer   | P2.1      | DONE (`4f7f11f`)                                                                                                                                                                                    |
+| P2.3 | Policy helpers (lead/horizon/available-hours/slot alignment, Eastern) — mirror storefront `policy.ts`; staff blocks may bypass lead/horizon but never capacity. | code-writer   | P2.1      | DONE (`4f7f11f`)                                                                                                                                                                                    |
+| P2.4 | Recurrence expansion: rule → concrete Eastern occurrence dates; cap (horizon_days or 104), surface truncation.                                                  | code-writer   | —         | DONE (`3636301`)                                                                                                                                                                                    |
+| P2.5 | Unit tests: overlap boundaries (half-open), buffer widening, capacity math, recurrence expansion, DST edges.                                                    | test-engineer | P2.1–P2.4 | DONE — covered by the code-writers' own suites (scheduler-policy/client/booking + recurrence); 92/92 green on `master`. NOTE: all unit-level (mocked `pg`); no live-DB integration test yet (P7.1). |
 
 ### P3 — Repositories & audit
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1 | DONE (`0509643`, merged to `master` ff `90e1659`) |
-| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail). | code-writer | P3.1 | DONE (`0509643`) — writer exists; wiring it into each mutation happens as P4/P6 actions land |
+
+| ID   | Task                                                                                                                                                     | Owner       | Depends | Status                                                                                       |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------- | -------------------------------------------------------------------------------------------- |
+| P3.1 | Typed repositories for `items`, `item_prices`, `categories`, `item_categories`, `reservations`, `reservation_groups`, `reservation_series`, `app_users`. | code-writer | P1.1    | DONE (`0509643`, merged to `master` ff `90e1659`)                                            |
+| P3.2 | `admin_audit_log` writer; call on **every** mutation (action, entity, entity_id, before/after detail).                                                   | code-writer | P3.1    | DONE (`0509643`) — writer exists; wiring it into each mutation happens as P4/P6 actions land |
 
 ### P4 — Auth & authorization
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | DONE (`961209f` stub) + **real client wired 2026-07-26** (`lib/auth/firebase-client.ts` — real Web SDK: `signInWithProvider` Google popup + `signInWithEmailPassword`; `firebase` installed) + **Email/Password inputs added to `app/login/login-form.tsx`** (real path now: email/password form + Google button). typecheck/lint clean. Not yet committed/merged. |
-| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | **DONE 2026-07-26** — real `firebase-admin` swapped into `lib/auth/session.ts`: `verifyIdToken(idToken, true)` → `createSessionCookie` (mint), `verifySessionCookie(value, true)` → identity (read; returns `null` on invalid/revoked). Cached `getAdminAuth()` uses ADC (Cloud Run runtime SA) or `GOOGLE_APPLICATION_CREDENTIALS` locally. `firebase-admin` installed; 4 real-path unit tests added (`tests/auth-session.test.ts`, admin mocked). Edge boundary preserved — `middleware.ts` stays cookie-presence-only. End-to-end real sign-in now complete (client P4.1 + this). Not yet committed/merged. |
-| P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | DONE (`961209f`, `lib/auth/guards.ts`; nav role type aligned to canonical `UserRole` `c648610`) |
-| P4.4 | Bootstrap first admin (§5 insert) once their UID is known. | main | P4.3, Q3 | **DONE (2026-08-05)** — `@bachmancc.org` admin bootstrapped in **prod** `app_users` and verified live: exactly 1 row, `dhanks@bachmancc.org` / `uid=aOcGPdPctZMhw6TFeMqgIkyvLio1` / `role=admin` / `active=true` (interim `dphanks@gmail.com` row removed by the swap). Human confirmed local sign-in (auth via `bcc-admin-staging`, roles from prod `DATABASE_URL`); `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. **Follow-up only if needed:** insert an admin into the **dev** branch (0 `app_users`) if `DATABASE_URL` is later repointed at dev for local dev — not required while local `DATABASE_URL`=prod. |
+
+| ID   | Task                                                                                                                                                                   | Owner       | Depends    | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token.                                                                                                 | code-writer | P0.2, Q2   | DONE (`961209f` stub) + **real client wired 2026-07-26** (`lib/auth/firebase-client.ts` — real Web SDK: `signInWithProvider` Google popup + `signInWithEmailPassword`; `firebase` installed) + **Email/Password inputs added to `app/login/login-form.tsx`** (real path now: email/password form + Google button). typecheck/lint clean. Not yet committed/merged.                                                                                                                                                                                                                                              |
+| P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev.                   | code-writer | P1.1, Q2   | **DONE 2026-07-26** — real `firebase-admin` swapped into `lib/auth/session.ts`: `verifyIdToken(idToken, true)` → `createSessionCookie` (mint), `verifySessionCookie(value, true)` → identity (read; returns `null` on invalid/revoked). Cached `getAdminAuth()` uses ADC (Cloud Run runtime SA) or `GOOGLE_APPLICATION_CREDENTIALS` locally. `firebase-admin` installed; 4 real-path unit tests added (`tests/auth-session.test.ts`, admin mocked). Edge boundary preserved — `middleware.ts` stays cookie-presence-only. End-to-end real sign-in now complete (client P4.1 + this). Not yet committed/merged.  |
+| P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | DONE (`961209f`, `lib/auth/guards.ts`; nav role type aligned to canonical `UserRole` `c648610`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| P4.4 | Bootstrap first admin (§5 insert) once their UID is known.                                                                                                             | main        | P4.3, Q3   | **DONE (2026-08-05)** — `@bachmancc.org` admin bootstrapped in **prod** `app_users` and verified live: exactly 1 row, `dhanks@bachmancc.org` / `uid=aOcGPdPctZMhw6TFeMqgIkyvLio1` / `role=admin` / `active=true` (interim `dphanks@gmail.com` row removed by the swap). Human confirmed local sign-in (auth via `bcc-admin-staging`, roles from prod `DATABASE_URL`); `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. **Follow-up only if needed:** insert an admin into the **dev** branch (0 `app_users`) if `DATABASE_URL` is later repointed at dev for local dev — not required while local `DATABASE_URL`=prod. |
 
 ### P5 — UI: navigation & calendar
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P5.1 | Responsive app shell + menu bar (Calendar, Products, Add Reservation, Update Prices; admin: Categories, Users) collapsing to hamburger; hide admin entries for schedulers (server still enforces). | code-writer | P4.3 | DONE (`e68274c`, `components/nav/*` role-aware shell) |
+
+| ID   | Task                                                                                                                                                                                                  | Owner       | Depends    | Status                                                     |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------- | ---------------------------------------------------------- |
+| P5.1 | Responsive app shell + menu bar (Calendar, Products, Add Reservation, Update Prices; admin: Categories, Users) collapsing to hamburger; hide admin entries for schedulers (server still enforces).    | code-writer | P4.3       | DONE (`e68274c`, `components/nav/*` role-aware shell)      |
 | P5.2 | Weekly calendar: 7 columns, multi-day spanning bars, cross-week `<`/`>` continuation indicators, confirmed vs block styling, greyed/omitted cancelled, prev/next/today, `+` button → Add Reservation. | code-writer | P3.1, P5.1 | DONE (`a891d05`, `app/calendar/*` + `calendar-week` tests) |
 
 ### P6 — UI: reservations, products, prices, users
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P6.1 | Add Reservation: multi-product line items + recurrence controls; on submit run race-safe check across all (item × occurrence), no partial commit. | code-writer | P2.2, P2.4, P5.2 | TODO |
-| P6.2 | Edit Reservation: edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`. | code-writer | P6.1 | TODO |
-| P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides. | code-writer | P3.1 | TODO |
-| P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer | P3.1, P4.3 | TODO |
-| P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`. | code-writer | P3.1, P4.3 | TODO |
-| P6.6 | User management (admin): CRUD `app_users` (set role, deactivate); guard against removing last active admin; re-sync custom claim on change. | code-writer | P3.1, P4.3 | TODO |
-| P6.7 | Full flow tests: booking (single/multi/recurring), price edits, product lifecycle, role guards (server-side denial). | test-engineer | P6.1–P6.6 | TODO |
+
+| ID   | Task                                                                                                                                                                          | Owner         | Depends          | Status |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------- | ------ |
+| P6.1 | Add Reservation: multi-product line items + recurrence controls; on submit run race-safe check across all (item × occurrence), no partial commit.                             | code-writer   | P2.2, P2.4, P5.2 | DONE (`1ab94e4`, merged to `master` `e56b0fa`) |
+| P6.2 | Edit Reservation: edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`.                                                       | code-writer   | P6.1             | TODO   |
+| P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides.                               | code-writer   | P3.1             | TODO   |
+| P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer   | P3.1, P4.3       | TODO   |
+| P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`.                                                                                                 | code-writer   | P3.1, P4.3       | TODO   |
+| P6.6 | User management (admin): CRUD `app_users` (set role, deactivate); guard against removing last active admin; re-sync custom claim on change.                                   | code-writer   | P3.1, P4.3       | TODO   |
+| P6.7 | Full flow tests: booking (single/multi/recurring), price edits, product lifecycle, role guards (server-side denial).                                                          | test-engineer | P6.1–P6.6        | TODO   |
 
 ### P7 — Cross-system verification
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P7.1 | Create a block/reservation in admin → confirm storefront availability reflects it within ~30s and won't double-book that window. | main | P6.1 | TODO |
+
+| ID   | Task                                                                                                                             | Owner | Depends | Status |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------- | ----- | ------- | ------ |
+| P7.1 | Create a block/reservation in admin → confirm storefront availability reflects it within ~30s and won't double-book that window. | main  | P6.1    | TODO   |
 
 ### P9 — Shared code consolidation (with storefront)
+
 Per the human's direction (Q1): common functions must live in a **shared/common area**
 consumed by both storefront and admin, not duplicated. **The storefront repo is now
 available** (https://github.com/thedavidhanks/bcc-rentals-frontend, public, `main`,
@@ -238,23 +252,25 @@ verified reachable 2026-07-23, tip `1074a9e`), so this phase is unblocked. The s
 in P2/P3 that mirrors storefront logic is tagged `// TODO(P9): consolidate` so it's easy to
 find and hoist.
 
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P9.1 | ~~Obtain storefront repo (address from human)~~ + ~~decide the shared-code mechanism~~. Repo provided & verified: https://github.com/thedavidhanks/bcc-rentals-frontend (public, `main`). Mechanism chosen: **npm-workspaces monorepo package `@bcc/scheduler`**. Standing up the package + extraction is P9.2. | main | Q1 addr | DONE (2026-07-23 — repo confirmed reachable; mechanism = npm-workspaces `@bcc/scheduler`) |
-| P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package. | code-writer | P9.1 | DONE (`809785a`, `packages/scheduler` = `@bcc/scheduler`; exports `scheduler/{errors,policy,types}` + `products/types`; consumed via workspaces + tsconfig paths, no build step) |
-| P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites. | code-writer | P9.2 | TODO |
-| P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers). | code-writer | P9.3 | TODO |
+| ID   | Task                                                                                                                                                                                                                                                                                                            | Owner       | Depends | Status                                                                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P9.1 | ~~Obtain storefront repo (address from human)~~ + ~~decide the shared-code mechanism~~. Repo provided & verified: https://github.com/thedavidhanks/bcc-rentals-frontend (public, `main`). Mechanism chosen: **npm-workspaces monorepo package `@bcc/scheduler`**. Standing up the package + extraction is P9.2. | main        | Q1 addr | DONE (2026-07-23 — repo confirmed reachable; mechanism = npm-workspaces `@bcc/scheduler`)                                                                                        |
+| P9.2 | Identify the common surface: `scheduler/{db,client,policy}`, `products/{types,repository}`, env/time/money helpers. Extract into the shared package.                                                                                                                                                            | code-writer | P9.1    | DONE (`809785a`, `packages/scheduler` = `@bcc/scheduler`; exports `scheduler/{errors,policy,types}` + `products/types`; consumed via workspaces + tsconfig paths, no build step) |
+| P9.3 | Refactor both storefront and admin to import from the shared package; remove duplicated copies; run both test suites.                                                                                                                                                                                           | code-writer | P9.2    | TODO                                                                                                                                                                             |
+| P9.4 | Reconcile any admin code that was reimplemented from spec pseudocode against the now-shared canonical implementation (all `TODO(P9)` markers).                                                                                                                                                                  | code-writer | P9.3    | TODO                                                                                                                                                                             |
 
 ### P8 — Deployment
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main | — | TODO |
-| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | TODO (unblocked — `bcc-admin-prod` exists w/ billing+APIs+`run-runtime` SA; `DATABASE_URL` secret + accessor already granted. Needs P8.1 runbook.) |
-| P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4). NOTE (2026-07-26): **no Authorized Domain needed for local dev** — Firebase authorizes `localhost` by default, so real Google/Email-Password sign-in can be tested locally without deploying. The `*.run.app` URL (from P8.2) and later `admin.bachmancc.org` get added to Firebase **Authentication → Settings → Authorized domains** here, at deploy time. |
-| P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | **DONE (2026-08-05)** — ✅ **full §5 schema applied to prod** (all tables + `reservations.group_id/series_id`; verified live via PgAdmin apply of `db/schema.sql`) **and** ✅ **prod admin bootstrapped** (`@bachmancc.org` admin, swap complete, `ALLOWED_EMAIL_DOMAIN` set — see P4.4). Both prod-DB deliverables of this task are complete and verified live. Note prod was written to ahead of a formal deploy (pre-release), so this ran before P8.2 — no remaining prod-DB work for P8.5. |
-| P8.5 | Production smoke test (login per provider, create block, storefront reflects). | main | P8.4 | BLOCKED |
+
+| ID   | Task                                                                                                                                                       | Owner | Depends     | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main  | —           | TODO                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`.                                                              | main  | P8.1, P10.4 | TODO (unblocked — `bcc-admin-prod` exists w/ billing+APIs+`run-runtime` SA; `DATABASE_URL` secret + accessor already granted. Needs P8.1 runbook.)                                                                                                                                                                                                                                                                                                                                              |
+| P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list.                                                               | main  | P8.2        | BLOCKED (Q4). NOTE (2026-07-26): **no Authorized Domain needed for local dev** — Firebase authorizes `localhost` by default, so real Google/Email-Password sign-in can be tested locally without deploying. The `*.run.app` URL (from P8.2) and later `admin.bachmancc.org` get added to Firebase **Authentication → Settings → Authorized domains** here, at deploy time.                                                                                                                      |
+| P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin.                                                                                 | main  | P8.2, P1.5  | **DONE (2026-08-05)** — ✅ **full §5 schema applied to prod** (all tables + `reservations.group_id/series_id`; verified live via PgAdmin apply of `db/schema.sql`) **and** ✅ **prod admin bootstrapped** (`@bachmancc.org` admin, swap complete, `ALLOWED_EMAIL_DOMAIN` set — see P4.4). Both prod-DB deliverables of this task are complete and verified live. Note prod was written to ahead of a formal deploy (pre-release), so this ran before P8.2 — no remaining prod-DB work for P8.5. |
+| P8.5 | Production smoke test (login per provider, create block, storefront reflects).                                                                             | main  | P8.4        | BLOCKED                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### P10 — GCP organization & project structure
+
 Foundational cloud layout for **both** the admin app and the storefront. This precedes the
 P8 deploy tasks — Cloud Run, Secret Manager, and Identity Platform all need their target
 project to exist first (resolves Q4). Target hierarchy:
@@ -275,18 +291,18 @@ Platform user pools (staff vs customers), and per-project billing. The shared DB
 to GCP), so nothing forces the two apps to co-locate.
 
 **An Organization needs an identity account bound to a domain you control.** A GCP Org is created
-automatically once a **Cloud Identity** *or* **Google Workspace** account is associated with
+automatically once a **Cloud Identity** _or_ **Google Workspace** account is associated with
 `bachmancc.org`. Cloud Identity **Free** is sufficient and $0; Google Workspace for
 Nonprofits (if eligible) also yields the Org and adds the collaboration suite — see the director
 note below.
 
-| ID | Task | Owner | Depends | Status |
-|---|---|---|---|---|
-| P10.1 | **Talk to the community-center director** about adopting Google Workspace for Nonprofits (features listed below). Decide: Cloud Identity Free only, or Workspace for Nonprofits too. Confirm the org owns/controls the `bachmancc.org` domain + DNS. | main | — | TODO |
-| P10.2 | Register the identity account for `bachmancc.org`: **Cloud Identity Free now** (creates the Org immediately, unblocks everything downstream), **and** apply for **Google Workspace for Nonprofits** if the director opts in (eligibility runs through Google for Nonprofits / a validation partner and can take days–weeks — don't let it gate P10.3). Verify domain ownership via DNS TXT. | main | P10.1 | TODO |
-| P10.3 | Create the GCP **Organization** `bachmancc.org` (auto-appears on first Cloud Console sign-in as the identity account) and the **folder** `bcc-rentals`. Apply baseline org policies + a budget alert. | main | P10.2 | DONE (2026-07-23 — org `513346324292` pre-existed; folder `bcc-rentals`=`873642981137`; $50/mo budget w/ 50/90/100% alerts on billing acct `01E5FF-02B2AA-CE23CF`. Baseline org policies: recommended, awaiting human decision — see log.) |
-| P10.4 | Create the four projects under `bcc-rentals`: `bcc-storefront-prod`, `bcc-storefront-staging`, `bcc-admin-prod`, `bcc-admin-staging`. Per project: link billing, enable Cloud Run, create a least-privilege runtime SA, enable Identity Platform (customers on storefront, staff on admin). Store Neon creds in **`bcc-admin-prod`** Secret Manager. | main | P10.3 | DONE (2026-07-23 — 4 projects created & billing-linked; APIs enabled (run, artifactregistry, identitytoolkit, secretmanager, iam); `run-runtime` SA per project; `DATABASE_URL` secret shell in `bcc-admin-prod` w/ runtime-SA `secretAccessor` — value added out-of-band by human. Identity Platform pool config (staff/customer) deferred to P4/P8.) |
-| P10.5 | Bring the storefront under the org. Original plan was to **re-parent** the personal-account project; changed to **redeploy** (see note). | main | P10.3, P10.4 | DONE for **staging** (2026-07-23 — redeployed `bcc-rentals-frontend` into `bcc-storefront-staging` (`78017895905`), Cloud Run `us-east1`, service `bcc-rentals`, URL `https://bcc-rentals-78017895905.us-east1.run.app`). **Decision reversed: redeploy, not re-parent** — the org has domain-restricted sharing on by default (`iam.allowedPolicyMemberDomains`), which blocks moving a project owned by external `dphanks@gmail.com` into the folder (and blocks adding gmail identities to any org resource). Redeploy was cleaner for a dev site. Personal `bcc-rentals` project under `dphanks@gmail.com` still exists (untouched) — decommission once the org deployment is promoted. **TODO if wanted:** prod storefront redeploy into `bcc-storefront-prod` + domain mapping. |
+| ID    | Task                                                                                                                                                                                                                                                                                                                                                                                        | Owner | Depends      | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P10.1 | **Talk to the community-center director** about adopting Google Workspace for Nonprofits (features listed below). Decide: Cloud Identity Free only, or Workspace for Nonprofits too. Confirm the org owns/controls the `bachmancc.org` domain + DNS.                                                                                                                                        | main  | —            | TODO                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| P10.2 | Register the identity account for `bachmancc.org`: **Cloud Identity Free now** (creates the Org immediately, unblocks everything downstream), **and** apply for **Google Workspace for Nonprofits** if the director opts in (eligibility runs through Google for Nonprofits / a validation partner and can take days–weeks — don't let it gate P10.3). Verify domain ownership via DNS TXT. | main  | P10.1        | TODO                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| P10.3 | Create the GCP **Organization** `bachmancc.org` (auto-appears on first Cloud Console sign-in as the identity account) and the **folder** `bcc-rentals`. Apply baseline org policies + a budget alert.                                                                                                                                                                                       | main  | P10.2        | DONE (2026-07-23 — org `513346324292` pre-existed; folder `bcc-rentals`=`873642981137`; $50/mo budget w/ 50/90/100% alerts on billing acct `01E5FF-02B2AA-CE23CF`. Baseline org policies: recommended, awaiting human decision — see log.)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| P10.4 | Create the four projects under `bcc-rentals`: `bcc-storefront-prod`, `bcc-storefront-staging`, `bcc-admin-prod`, `bcc-admin-staging`. Per project: link billing, enable Cloud Run, create a least-privilege runtime SA, enable Identity Platform (customers on storefront, staff on admin). Store Neon creds in **`bcc-admin-prod`** Secret Manager.                                        | main  | P10.3        | DONE (2026-07-23 — 4 projects created & billing-linked; APIs enabled (run, artifactregistry, identitytoolkit, secretmanager, iam); `run-runtime` SA per project; `DATABASE_URL` secret shell in `bcc-admin-prod` w/ runtime-SA `secretAccessor` — value added out-of-band by human. Identity Platform pool config (staff/customer) deferred to P4/P8.)                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| P10.5 | Bring the storefront under the org. Original plan was to **re-parent** the personal-account project; changed to **redeploy** (see note).                                                                                                                                                                                                                                                    | main  | P10.3, P10.4 | DONE for **staging** (2026-07-23 — redeployed `bcc-rentals-frontend` into `bcc-storefront-staging` (`78017895905`), Cloud Run `us-east1`, service `bcc-rentals`, URL `https://bcc-rentals-78017895905.us-east1.run.app`). **Decision reversed: redeploy, not re-parent** — the org has domain-restricted sharing on by default (`iam.allowedPolicyMemberDomains`), which blocks moving a project owned by external `dphanks@gmail.com` into the folder (and blocks adding gmail identities to any org resource). Redeploy was cleaner for a dev site. Personal `bcc-rentals` project under `dphanks@gmail.com` still exists (untouched) — decommission once the org deployment is promoted. **TODO if wanted:** prod storefront redeploy into `bcc-storefront-prod` + domain mapping. |
 
 **Director note — Google Workspace for Nonprofits features (for the P10.1 conversation):**
 Google grants eligible nonprofits Google Workspace at no cost, which bundles the collaboration
@@ -311,6 +327,7 @@ calendar, and the `@bcc/scheduler` shared package all exist and are green (139/1
 with the **P6 UI wave** — the CRUD screens that consume all of the above.
 
 **First: housekeeping**
+
 - `npm install` if `node_modules` is absent.
 - **Prune stale wave-3 branches** (all content is on `master` via `c648610`):
   `code-writer/p4-auth`, `code-writer/p5.1-shell`, `code-writer/p5.2-calendar`,
@@ -320,7 +337,8 @@ with the **P6 UI wave** — the CRUD screens that consume all of the above.
 **Delegate this wave now (unblocked):**
 | Task | What | Owner | Notes |
 |---|---|---|---|
-| **P6.1** | **Add Reservation** — multi-product line items + recurrence controls; on submit run the race-safe check across all (item × occurrence), no partial commit. **The next task.** | code-writer | Deps P2.2, P2.4, P5.2 all DONE. The `+` button + `app/reservations/new` route stub already exist; wire in the engine + `writeAuditLog`. |
+| ~~**P6.1**~~ | ~~Add Reservation~~ — **DONE 2026-08-05** (`1ab94e4`, merged to `master` `e56b0fa`). Multi-product line items + recurrence, race-safe all-or-nothing write, series + audit committed in one txn. Unblocks **P6.2** (Edit Reservation) and **P7.1** (live-DB cross-system check). | code-writer | — |
+| **P6.2** | **Edit Reservation** — edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`. **Now the next reservation task** (P6.1 landed). | code-writer | Dep P6.1 DONE. |
 | P6.3 | Update Prices — CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row. | code-writer | Deps P3.1 DONE. Independent of P6.1 — parallelizable. |
 | P6.4 | Products (admin) — Add/Edit (deactivate not delete, `updated_at=now()`, unique slug). | code-writer | Deps P3.1, P4.3 DONE. |
 | P6.5 | Categories (admin) — CRUD `categories` + assign via `item_categories`. | code-writer | Deps P3.1, P4.3 DONE. |
@@ -342,7 +360,8 @@ bootstrap (**Q3 + P4.4 DONE 2026-08-05** — `@bachmancc.org` admin live in prod
 set), and **P8.4 DONE** (full §5 schema on prod + admin bootstrapped). `bcc-admin-prod` exists
 (P10.4) so **P8.1 (deploy runbook) + P8.2 (deploy) are unblocked**. Still open on the deploy path:
 **P8.3** (map `admin.bachmancc.org` + Firebase Authorized Domains at deploy) and **P8.5** (prod
-smoke test, after deploy). P7.1 (live-DB cross-system check) waits on P6.1.
+smoke test, after deploy). **P7.1 (live-DB cross-system check) is now unblocked** — P6.1 landed,
+so a real block can be created in the admin app and checked against the storefront.
 
 **Merge protocol reminder:** `git merge` requires human approval in this environment —
 code-writer builds/verifies on a branch and stops; a human runs the merge. For a multi-agent
@@ -372,8 +391,8 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
 - 2026-07-20 — **P1.5 DONE:** with human go-ahead (Q5 answered), applied `db/schema.sql` to the Neon
   **dev** branch via `npm run db:apply` (`DATABASE_URL_DEV`, idempotent). Verified present: tables
   `app_users`, `reservation_groups`, `reservation_series`, `admin_audit_log`; `reservations.group_id`
-  + `reservations.series_id`; and the new indexes. Prod apply remains P8.4. P9.1 mechanism decided:
-  monorepo `@bcc/scheduler` shared package, sequenced AFTER the current engine/repo branches land.
+  - `reservations.series_id`; and the new indexes. Prod apply remains P8.4. P9.1 mechanism decided:
+    monorepo `@bcc/scheduler` shared package, sequenced AFTER the current engine/repo branches land.
 - 2026-07-20 — Wave 2 dispatched (3 parallel `code-writer` agents, `model: opus`): P2.4 recurrence,
   P3.1+P3.2 repositories & audit, P2.1–P2.3 race-safe engine copying storefront
   `lib/scheduler/{db,client,policy}.ts`. Each: no DDL, no deploy, no `.env.local`, run checks
@@ -396,7 +415,7 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   Unblocks P2.1–P2.3 (copy race-safe write + policy from the storefront instead of
   reimplementing from spec) and P9.1 (repo in hand — next step is choosing the shared-code
   mechanism). Updated Q1 row, P9.1, the P9 intro, the "Next session" guidance, and CLAUDE.md's
-  storefront-reference section accordingly. Repo is *not* vendored into this repo — copy/consolidate.
+  storefront-reference section accordingly. Repo is _not_ vendored into this repo — copy/consolidate.
 - 2026-07-22 — **Wave 2 MERGED to `master` (fast-forward, tip `90e1659`).** Human ran the merge.
   P2.1–P2.5, P3.1, P3.2 now DONE (`0509643` repos+audit, `4f7f11f` engine, `3636301` recurrence).
   `master` green: `npm test` 92/92, `build` exit 0. Refreshed "Current state" and "Next session".
@@ -534,16 +553,16 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
     and `reservations.group_id/series_id`. Only `app_users` + storefront tables present.
   - **DEV** (`DATABASE_URL_DEV`, host `ep-wild-feather-…-pooler`): **alive** (contrary to the
     "auto-deleted after 30 days" assumption) with the **complete** §5 schema and **0** `app_users`.
-  **Decisions (human):** (1) apply full `schema.sql` to prod to close the gap — must run
-  `DATABASE_URL_DEV= APPLY_TO_PROD=1 npm run db:apply`, because the apply script prefers
-  `DATABASE_URL_DEV` whenever it's set (so `APPLY_TO_PROD=1` alone still hits dev); (2) **re-bootstrap
-  the admin with a `@bachmancc.org` identity** and drop the interim Gmail row — a Gmail admin is a
-  lockout risk once `ALLOWED_EMAIL_DOMAIN` (currently unset) is enabled for launch; (3) **resume
-  dev-branch-first development** (dev branch is healthy) — the prod row counts toward P8.4, not a
-  move of the working DB to prod. Security review of the human's actions: bootstrap SQL was sound
-  (idempotent `ON CONFLICT`, no injection/secret exposure); the two issues are the incomplete prod
-  DDL and the Gmail-vs-domain identity, both being remediated. Updated Current state, Q3, P4.4, P8.4.
-  **Docs synced:** CLAUDE.md (auth/DB state) + ARCHITECTURE_PLAN_B.md (staleness banner).
+    **Decisions (human):** (1) apply full `schema.sql` to prod to close the gap — must run
+    `DATABASE_URL_DEV= APPLY_TO_PROD=1 npm run db:apply`, because the apply script prefers
+    `DATABASE_URL_DEV` whenever it's set (so `APPLY_TO_PROD=1` alone still hits dev); (2) **re-bootstrap
+    the admin with a `@bachmancc.org` identity** and drop the interim Gmail row — a Gmail admin is a
+    lockout risk once `ALLOWED_EMAIL_DOMAIN` (currently unset) is enabled for launch; (3) **resume
+    dev-branch-first development** (dev branch is healthy) — the prod row counts toward P8.4, not a
+    move of the working DB to prod. Security review of the human's actions: bootstrap SQL was sound
+    (idempotent `ON CONFLICT`, no injection/secret exposure); the two issues are the incomplete prod
+    DDL and the Gmail-vs-domain identity, both being remediated. Updated Current state, Q3, P4.4, P8.4.
+    **Docs synced:** CLAUDE.md (auth/DB state) + ARCHITECTURE_PLAN_B.md (staleness banner).
 - 2026-08-05 (later) — **Prod §5 schema completed + `@bachmancc.org` admin created; swap is the last
   step.** Human applied the full `db/schema.sql` to the Neon **prod** branch via PgAdmin. **Live
   re-verification (Node + `pg`, credentials never echoed):** prod now has **all 5 §5 objects**
@@ -568,3 +587,25 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   bootstrap — are both complete). Updated Current state and the "Next session" blocked-items note.
   Remaining deploy-path work: P8.1/P8.2 (unblocked), P8.3 (domain + Authorized Domains), P8.5
   (smoke test). Dev-branch admin insert stays optional (only if `DATABASE_URL` is repointed at dev).
+- 2026-08-05 — **P6.1 (Add Reservation) MERGED to `master` (`1ab94e4`; merge commit `e56b0fa`).**
+  Built by a `code-writer` agent (`model: opus`) on `code-writer/p6.1-add-reservation` in a
+  worktree (isolation, no branch scramble); human ran the merge, branch + worktree pruned.
+  Delivered: server-rendered `app/reservations/new` (`page.tsx` + client `reservation-form.tsx`
+  + `page.module.css`) with multi-product line items, recurrence controls (freq/interval/weekday/
+  until-or-count) surfacing `expandRecurrence`'s truncation flag, and contact/notes; a
+  `"server-only"` `createReservationAction` that calls `requireScheduler()` FIRST, validates with
+  Zod, expands recurrence to Eastern occurrences, and runs the race-safe write. **Key design:**
+  threaded an OPTIONAL `PoolClient` through `scheduler.createReservation`/`createBooking` (factored
+  bodies into `run(client)`; `return client ? run(client) : withTransaction(run)`) so the action
+  commits the `reservation_series` row + all reservation rows + the `admin_audit_log` row in ONE
+  transaction, all-or-nothing (`GroupBookingConflictError` → reports failing item×date pairs, no
+  partial commit). Lock/capacity/insert SQL byte-identical; behavior unchanged when no client is
+  passed (existing engine tests still green). Added DST-correct `easternInstant()` to
+  `lib/calendar/week.ts` (civil Eastern date + minutes-since-midnight → `timestamptz` via
+  offset correction — NOT naive midnight+ms). Verified on the merged tree: `lint` + `typecheck`
+  clean, `npm test` **154/154 (13 files)** (was 139); `npm run build` compiles successfully (the
+  bare-worktree "collect page data" failure was environmental — missing `.env.local` `NEXT_PUBLIC_*`,
+  hits pre-existing `/calendar`/`/users` too; the main workspace with `.env.local` builds clean).
+  Two `// TODO(P9)` markers added on the new `client?` params (reconcile the admin-only txn-client
+  extension against the storefront under P9.3/P9.4). **Unblocks P6.2** (Edit Reservation, now the
+  next reservation task) and **P7.1** (live-DB cross-system check). Marked P6.1 DONE.
