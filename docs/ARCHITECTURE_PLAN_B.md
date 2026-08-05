@@ -1,5 +1,18 @@
 # BCC Rentals — Architecture Plan B
 
+> ⚠️ **SUPERSEDED — historical/alternative plan. Do NOT build against this.**
+> This document describes a **storefront** hosting plan on **AWS Amplify + Upstash Redis**.
+> The **admin app** (this repo) is actually built and deployed on **GCP Cloud Run** (`us-east1`,
+> scale-to-zero) with **Firebase Authentication / GCP Identity Platform**, an npm-workspaces
+> monorepo (`@bcc/scheduler`), and **no Redis/Upstash and no PayPal/Resend**. The authoritative
+> architecture lives in **[CLAUDE.md](../CLAUDE.md)** (Architecture + GCP layout sections) and
+> **[EXECUTION_PLAN.md](./EXECUTION_PLAN.md)** (phase P10 for the GCP org/project structure).
+> The referenced siblings `ARCHITECTURE_PLAN.md` and `ARCHITECTURE_COMPARISON.md` are **not
+> present** in this repo. A few concrete facts below are also out of date as of **2026-08-05**:
+> the Neon **dev** branch is alive with the full admin (§5) schema (it did not auto-delete), and
+> the Neon **prod** branch now carries that schema plus the first bootstrapped admin. Kept only
+> for historical reference to the storefront's evaluated hosting options.
+
 End goal: a production environment hosted entirely on **AWS Amplify**, with all reservation logic owned in this Next.js codebase, backed by **Neon Postgres** (free tier) for durable state and **Upstash Redis** for ephemeral state. No PHP, no Lightsail, no separate booking system. Hard ceiling: **$30/mo total subscription-style platform spend** (excluding per-transaction PayPal fees).
 
 This plan is an alternative to [ARCHITECTURE_PLAN.md](./ARCHITECTURE_PLAN.md). See [ARCHITECTURE_COMPARISON.md](./ARCHITECTURE_COMPARISON.md) for a side-by-side comparison.

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { readFileSync } from "node:fs";
+
 import {
   getApps,
   initializeApp,
@@ -199,21 +201,50 @@ async function verifyRealSession(
 }
 
 /**
- * The Firebase Admin `Auth` instance, initialized once and cached. On Cloud Run
- * use Application Default Credentials from the runtime service account (no key
- * file); locally set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON.
+ * The Firebase Admin `Auth` instance, initialized once and cached.
+ *
+ * Credential resolution (all paths ultimately provide a signing identity, which
+ * `createSessionCookie` requires):
+ *   • Cloud Run: GOOGLE_APPLICATION_CREDENTIALS unset → applicationDefault()
+ *     picks up the runtime service account (it can sign via IAM).
+ *   • Local dev with a service-account KEY file (`type: "service_account"`):
+ *     use cert(). (Discouraged here — the org policy blocks minting these keys.)
+ *   • Local dev with an ADC file — a plain user login (`type: "authorized_user"`,
+ *     which CANNOT sign) or, the supported setup, an impersonated service account
+ *     (`type: "impersonated_service_account"`, which CAN sign via signBlob):
+ *     fall through to applicationDefault(), which the google-auth library
+ *     resolves from GOOGLE_APPLICATION_CREDENTIALS itself and handles natively.
+ *
+ * cert() ONLY accepts a service-account key JSON, so we must not route an ADC
+ * file through it — hence the `type` peek below.
  */
 let cachedAuth: Auth | undefined;
 
+/**
+ * True when the JSON at `path` is a raw service-account KEY (the only shape
+ * cert() accepts). Everything else — user ADC, impersonated-SA ADC, or an
+ * unreadable/malformed file — returns false so we defer to applicationDefault().
+ */
+function isServiceAccountKeyFile(path: string): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as { type?: string };
+    return parsed.type === "service_account";
+  } catch {
+    return false;
+  }
+}
+
 function getAdminAuth(): Auth {
   if (cachedAuth) return cachedAuth;
+  const credsPath = env.GOOGLE_APPLICATION_CREDENTIALS;
   const app: App =
     getApps()[0] ??
     initializeApp({
       projectId: env.FIREBASE_PROJECT_ID,
-      credential: env.GOOGLE_APPLICATION_CREDENTIALS
-        ? cert(env.GOOGLE_APPLICATION_CREDENTIALS)
-        : applicationDefault(),
+      credential:
+        credsPath && isServiceAccountKeyFile(credsPath)
+          ? cert(credsPath)
+          : applicationDefault(),
     });
   cachedAuth = getAuth(app);
   return cachedAuth;

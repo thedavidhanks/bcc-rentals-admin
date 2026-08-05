@@ -29,7 +29,40 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-07-26)
+## Current state (as of 2026-08-05)
+
+**Q3 answered + first admin bootstrapped against PROD; P4.4 DONE (2026-08-05).** The human
+signed in once, created the first admin, and completed the `@bachmancc.org` re-bootstrap.
+**Verified live 2026-08-05:**
+1. **Prod schema is COMPLETE.** ✅ All §5 objects present on the Neon **prod** branch
+   (`DATABASE_URL`): `app_users`, `reservation_groups`, `reservation_series`, `admin_audit_log`,
+   and `reservations.group_id`/`series_id`. (Applied via PgAdmin directly against prod; the full
+   idempotent `db/schema.sql` was run.) Audit writer and P6 reservation-grouping are unblocked on prod.
+2. **Re-bootstrap to `@bachmancc.org` DONE.** ✅ Prod `app_users` now holds exactly **one** row —
+   `dhanks@bachmancc.org` (`uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `role=admin`, `active=true`, UID
+   len 28); the interim `dphanks@gmail.com` row was deleted by the swap. Human confirmed a local
+   sign-in as `dhanks@bachmancc.org` (auth via `bcc-admin-staging`, roles read from prod
+   `DATABASE_URL`), then set **`ALLOWED_EMAIL_DOMAIN=bachmancc.org`** — all three steps verified
+   live against prod (1 admin row, correct identity/role/UID; `ALLOWED_EMAIL_DOMAIN` present).
+   Lockout risk eliminated (no non-`@bachmancc.org` identity remains). Remaining app-side item:
+   insert an admin into the **dev** branch (0 `app_users`) **only if** `DATABASE_URL` is later
+   repointed at dev for local development — not needed while local `DATABASE_URL`=prod.
+
+**DB workflow correction:** the assumption that the Neon **dev** branch auto-deleted is **false** —
+it is alive (`DATABASE_URL_DEV` connects) and carries the **complete** §5 schema with 0 `app_users`
+rows. **DDL/tooling should stay dev-branch-first.**
+
+**Auth vs. authorization — two independent axes (don't conflate them):**
+- **Firebase project** *authenticates* (issues the UID). `.env.local` uses `bcc-admin-staging` for
+  both the client and Admin SDK. `localhost` is auto-authorized, so real sign-in works locally
+  with no deploy.
+- **Neon DB (`DATABASE_URL`)** *authorizes* (UID → role lookup). **The running app only ever uses
+  `DATABASE_URL`; it never touches `DATABASE_URL_DEV`** (that var is for one-off DDL/tooling only).
+- **Current local reality:** `.env.local`'s `DATABASE_URL` points at the **prod** branch. So the
+  app locally signs in via `bcc-admin-staging` and reads roles from **prod** — the same DB the swap
+  SQL writes to. That's why the admin can sign in locally *today* without any dev-branch `app_users`
+  row. Adding the admin UID to the **dev** branch is **only** needed if `DATABASE_URL` is later
+  repointed at the dev branch for local development.
 
 **Q2 (Firebase) answered for staging (2026-07-26).** `bcc-admin-staging` Web SDK config is
 in `.env.local`; launch sign-in methods = **Google + Email/Password**. Both halves of the
@@ -111,7 +144,7 @@ These gate specific phases. Surface them to the human; do not guess.
 |---|---|---|---|
 | Q1 | ✅ **FULLY RESOLVED:** repo https://github.com/thedavidhanks/bcc-rentals-frontend (public, default branch `main`, verified reachable 2026-07-23, tip `1074a9e`). Strategy: do **not** duplicate — extract functions common to storefront + admin into a **shared/common area** and consume it from both (see P9). Mechanism **decided**: npm-workspaces monorepo package `@bcc/scheduler`. Copy verbatim from the storefront in the interim if consolidation lags. | P2, P5, P6 (quality) | ~~Awaiting repo address~~ — **resolved**; the race-safe write + policy can now be copied from the storefront instead of reimplemented from spec pseudocode. |
 | Q2 | ✅ **ANSWERED (2026-07-26, staging).** Firebase project **`bcc-admin-staging`** config supplied in `.env.local` (all `NEXT_PUBLIC_FIREBASE_*` + `FIREBASE_PROJECT_ID` set; values never echoed). **Enabled sign-in methods for launch: Google + Email/Password** (GitHub/Facebook/Apple deferred). Both halves wired real: client (`lib/auth/firebase-client.ts`, `firebase`) + server Admin SDK (`lib/auth/session.ts`, **P4.2 DONE**, `firebase-admin`) + Email/Password inputs in `app/login`. **Only remaining before Q2 is fully closed:** Authorized Domains added at deploy = **P8.3**. Prod (`bcc-admin-prod`) Firebase config still to gather at deploy time. | P4 | ~~Cannot complete auth; stub dev-only bypass~~ — **resolved**; end-to-end real auth implemented (P8.3 authorized domains remain). |
-| Q3 | **First admin's Firebase UID** for the bootstrap insert (§5). Requires that person to sign in once. | P4.4 | Defer; leave a documented one-liner to run later. |
+| Q3 | ✅ **FULLY RESOLVED (2026-08-05).** First admin signed in via `bcc-admin-staging`; UID captured and inserted into prod `app_users`. Interim Gmail identity (`dphanks@gmail.com`) **swapped** for the `@bachmancc.org` admin (`uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `dhanks@bachmancc.org`) — verified live: prod holds exactly 1 admin row, local sign-in confirmed, `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. P4.4 DONE. | P4.4 | ~~Defer~~ — resolved (UID known, admin bootstrapped). |
 | Q4 | **GCP project id + confirm domain** `admin.bachmancc.org` and DNS control. Now largely superseded by **P10** — the org/project structure (`bcc-admin-prod` etc.) produces the concrete project ids the deploy needs. | P8, P10 | Deploy phase stays BLOCKED until P10.4 creates `bcc-admin-prod`. |
 | Q5 | ✅ **ANSWERED (2026-07-20):** human gave go-ahead; `schema.sql` applied to the Neon **dev** branch (`DATABASE_URL_DEV`) and verified. Prod (`main` branch) still pending under P8.4. | P1.4 (apply) | ~~Write `schema.sql` as a file only~~ — resolved. |
 
@@ -172,7 +205,7 @@ These gate specific phases. Surface them to the human; do not guess.
 | P4.1 | Firebase Web SDK client sign-in UI (multi-provider); returns ID token. | code-writer | P0.2, Q2 | DONE (`961209f` stub) + **real client wired 2026-07-26** (`lib/auth/firebase-client.ts` — real Web SDK: `signInWithProvider` Google popup + `signInWithEmailPassword`; `firebase` installed) + **Email/Password inputs added to `app/login/login-form.tsx`** (real path now: email/password form + Google button). typecheck/lint clean. Not yet committed/merged. |
 | P4.2 | Server: Admin SDK `verifyIdToken` → session cookie via `createSessionCookie`; verify cookie in middleware. ADC on Cloud Run, key only for local dev. | code-writer | P1.1, Q2 | **DONE 2026-07-26** — real `firebase-admin` swapped into `lib/auth/session.ts`: `verifyIdToken(idToken, true)` → `createSessionCookie` (mint), `verifySessionCookie(value, true)` → identity (read; returns `null` on invalid/revoked). Cached `getAdminAuth()` uses ADC (Cloud Run runtime SA) or `GOOGLE_APPLICATION_CREDENTIALS` locally. `firebase-admin` installed; 4 real-path unit tests added (`tests/auth-session.test.ts`, admin mocked). Edge boundary preserved — `middleware.ts` stays cookie-presence-only. End-to-end real sign-in now complete (client P4.1 + this). Not yet committed/merged. |
 | P4.3 | UID → `app_users` → role lookup; deny unknown users. `requireScheduler` / `requireAdmin` guards used in **every** mutating route/action. Optional custom-claim mirror. | code-writer | P4.2, P3.1 | DONE (`961209f`, `lib/auth/guards.ts`; nav role type aligned to canonical `UserRole` `c648610`) |
-| P4.4 | Bootstrap first admin (§5 insert) once their UID is known. | main | P4.3, Q3 | BLOCKED (Q3) |
+| P4.4 | Bootstrap first admin (§5 insert) once their UID is known. | main | P4.3, Q3 | **DONE (2026-08-05)** — `@bachmancc.org` admin bootstrapped in **prod** `app_users` and verified live: exactly 1 row, `dhanks@bachmancc.org` / `uid=aOcGPdPctZMhw6TFeMqgIkyvLio1` / `role=admin` / `active=true` (interim `dphanks@gmail.com` row removed by the swap). Human confirmed local sign-in (auth via `bcc-admin-staging`, roles from prod `DATABASE_URL`); `ALLOWED_EMAIL_DOMAIN=bachmancc.org` set. **Follow-up only if needed:** insert an admin into the **dev** branch (0 `app_users`) if `DATABASE_URL` is later repointed at dev for local dev — not required while local `DATABASE_URL`=prod. |
 
 ### P5 — UI: navigation & calendar
 | ID | Task | Owner | Depends | Status |
@@ -218,7 +251,7 @@ find and hoist.
 | P8.1 | Adapt `DEPLOY_CLOUD_RUN.md` for admin: Firebase `NEXT_PUBLIC_*` build vars, no PayPal, `admin.bachmancc.org`, `--allow-unauthenticated` (app is the gate). | main | — | TODO |
 | P8.2 | Deploy to Cloud Run `us-east1`; secrets in Secret Manager; grant runtime SA `secretAccessor`. | main | P8.1, P10.4 | TODO (unblocked — `bcc-admin-prod` exists w/ billing+APIs+`run-runtime` SA; `DATABASE_URL` secret + accessor already granted. Needs P8.1 runbook.) |
 | P8.3 | Map `admin.bachmancc.org`; add to Firebase Authorized Domains + each provider callback list. | main | P8.2 | BLOCKED (Q4). NOTE (2026-07-26): **no Authorized Domain needed for local dev** — Firebase authorizes `localhost` by default, so real Google/Email-Password sign-in can be tested locally without deploying. The `*.run.app` URL (from P8.2) and later `admin.bachmancc.org` get added to Firebase **Authentication → Settings → Authorized domains** here, at deploy time. |
-| P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | BLOCKED |
+| P8.4 | Apply `schema.sql` to Neon **prod** (`main`) branch; bootstrap prod admin. | main | P8.2, P1.5 | **DONE (2026-08-05)** — ✅ **full §5 schema applied to prod** (all tables + `reservations.group_id/series_id`; verified live via PgAdmin apply of `db/schema.sql`) **and** ✅ **prod admin bootstrapped** (`@bachmancc.org` admin, swap complete, `ALLOWED_EMAIL_DOMAIN` set — see P4.4). Both prod-DB deliverables of this task are complete and verified live. Note prod was written to ahead of a formal deploy (pre-release), so this ran before P8.2 — no remaining prod-DB work for P8.5. |
 | P8.5 | Production smoke test (login per provider, create block, storefront reflects). | main | P8.4 | BLOCKED |
 
 ### P10 — GCP organization & project structure
@@ -304,10 +337,12 @@ scrambled (recoverable, but avoidable). One shared tree = one branch pointer the
 **Model note:** `code-writer`/`test-engineer` are pinned to `claude-sonnet-4-5` (NOT enabled
 here) — pass `model: opus` when launching or they fail immediately.
 
-**Still blocked until the human provides answers** (see open-questions table): swapping the
-auth stub for **real Firebase** (Q2) + prod-admin bootstrap (Q3, P4.4); P8.3/P8.4 deploy
-(domain mapping + prod schema apply). `bcc-admin-prod` now exists (P10.4) so **P8.1 (deploy
-runbook) + P8.2 (deploy) are unblocked**. P7.1 (live-DB cross-system check) waits on P6.1.
+**Resolved since wave 3:** real Firebase auth (Q2 — client + Admin SDK wired), prod-admin
+bootstrap (**Q3 + P4.4 DONE 2026-08-05** — `@bachmancc.org` admin live in prod, `ALLOWED_EMAIL_DOMAIN`
+set), and **P8.4 DONE** (full §5 schema on prod + admin bootstrapped). `bcc-admin-prod` exists
+(P10.4) so **P8.1 (deploy runbook) + P8.2 (deploy) are unblocked**. Still open on the deploy path:
+**P8.3** (map `admin.bachmancc.org` + Firebase Authorized Domains at deploy) and **P8.5** (prod
+smoke test, after deploy). P7.1 (live-DB cross-system check) waits on P6.1.
 
 **Merge protocol reminder:** `git merge` requires human approval in this environment —
 code-writer builds/verifies on a branch and stops; a human runs the merge. For a multi-agent
@@ -490,5 +525,46 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   Reservation is the immediate next task — all deps DONE), with P6.3/P6.4/P6.5/P6.6 parallelizable
   and P9.3→P9.4 cross-repo consolidation trailing. Prune the stale wave-3 branches + `agent-*`
   worktrees (all content is on `master`).
-</content>
-</invoke>
+- 2026-08-05 — **Q3 answered; first admin bootstrapped (P4.4 IN PROGRESS) — verified against live
+  DBs.** Human signed in via `bcc-admin-staging` and inserted the first admin. **Live verification
+  (Node + `pg`, credentials never echoed):**
+  - **PROD** (`DATABASE_URL`, host `ep-spring-fog-…`): has `app_users` with **1 row** —
+    `email=dphanks@gmail.com`, `role=admin`, `active=true`, UID len 28 (valid). But prod is
+    **missing the rest of §5**: `reservation_groups`, `reservation_series`, `admin_audit_log`,
+    and `reservations.group_id/series_id`. Only `app_users` + storefront tables present.
+  - **DEV** (`DATABASE_URL_DEV`, host `ep-wild-feather-…-pooler`): **alive** (contrary to the
+    "auto-deleted after 30 days" assumption) with the **complete** §5 schema and **0** `app_users`.
+  **Decisions (human):** (1) apply full `schema.sql` to prod to close the gap — must run
+  `DATABASE_URL_DEV= APPLY_TO_PROD=1 npm run db:apply`, because the apply script prefers
+  `DATABASE_URL_DEV` whenever it's set (so `APPLY_TO_PROD=1` alone still hits dev); (2) **re-bootstrap
+  the admin with a `@bachmancc.org` identity** and drop the interim Gmail row — a Gmail admin is a
+  lockout risk once `ALLOWED_EMAIL_DOMAIN` (currently unset) is enabled for launch; (3) **resume
+  dev-branch-first development** (dev branch is healthy) — the prod row counts toward P8.4, not a
+  move of the working DB to prod. Security review of the human's actions: bootstrap SQL was sound
+  (idempotent `ON CONFLICT`, no injection/secret exposure); the two issues are the incomplete prod
+  DDL and the Gmail-vs-domain identity, both being remediated. Updated Current state, Q3, P4.4, P8.4.
+  **Docs synced:** CLAUDE.md (auth/DB state) + ARCHITECTURE_PLAN_B.md (staleness banner).
+- 2026-08-05 (later) — **Prod §5 schema completed + `@bachmancc.org` admin created; swap is the last
+  step.** Human applied the full `db/schema.sql` to the Neon **prod** branch via PgAdmin. **Live
+  re-verification (Node + `pg`, credentials never echoed):** prod now has **all 5 §5 objects**
+  (`app_users`, `reservation_groups`, `reservation_series`, `admin_audit_log`) **plus**
+  `reservations.group_id`/`series_id`. `app_users` still holds the single interim Gmail row
+  (`dphanks@gmail.com`) — swap not yet run. Human created the replacement Firebase user in
+  `bcc-admin-staging`: `uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `dhanks@bachmancc.org`, "David Hanks".
+  **Provided:** an idempotent prod swap transaction (upsert new admin `ON CONFLICT (uid)` + delete
+  the Gmail row, with an in-txn `SELECT` sanity check before `COMMIT`). **Next (human):** run the
+  swap on prod, sign in once as `dhanks@bachmancc.org` to confirm admin access, then set
+  `ALLOWED_EMAIL_DOMAIN=bachmancc.org`. Also still open: insert an admin into the **dev** branch
+  (0 rows) for local dev. Updated Current state, Q3, P4.4, P8.4. Removed stray closing-tag
+  artifacts that had been committed at EOF.
+- 2026-08-05 (final) — **P4.4 DONE + Q3 fully resolved — swap complete, verified live.** Human
+  ran the prod swap SQL, signed in locally as `dhanks@bachmancc.org`, and set
+  `ALLOWED_EMAIL_DOMAIN=bachmancc.org`. **Live verification (Node + `pg`, credentials never echoed):**
+  prod `app_users` now holds **exactly 1 row** — `dhanks@bachmancc.org`,
+  `uid=aOcGPdPctZMhw6TFeMqgIkyvLio1`, `role=admin`, `active=true`, UID len 28; the interim
+  `dphanks@gmail.com` row is gone. `.env.local` `ALLOWED_EMAIL_DOMAIN` reads `bachmancc.org`.
+  Lockout risk eliminated (no non-`@bachmancc.org` identity remains in prod). Marked **P4.4 DONE**,
+  **Q3 fully resolved**, and **P8.4 DONE** (its two prod-DB deliverables — full §5 schema + admin
+  bootstrap — are both complete). Updated Current state and the "Next session" blocked-items note.
+  Remaining deploy-path work: P8.1/P8.2 (unblocked), P8.3 (domain + Authorized Domains), P8.5
+  (smoke test). Dev-branch admin insert stays optional (only if `DATABASE_URL` is repointed at dev).
