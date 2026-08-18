@@ -1,7 +1,13 @@
 import "server-only";
 
 import { executor, type Queryable } from "./shared";
-import type { AppUserInsert, AppUserRow, UserRole } from "./types";
+import type {
+  AppUserBindInput,
+  AppUserInsert,
+  AppUserInviteInsert,
+  AppUserRow,
+  UserRole,
+} from "./types";
 
 // Repository for the admin-owned `app_users` table (spec §5). The Firebase UID
 // is the durable account id; `role` is the canonical permission store. Authorize
@@ -120,4 +126,115 @@ export async function countActiveAdmins(client?: Queryable): Promise<number> {
       WHERE role = 'admin' AND active = true`,
   );
   return Number(rows[0]?.count ?? 0);
+}
+
+// ---------------------------------------------------------------------------
+// Invite-by-email onboarding (P6.6).
+//
+// A pending invite is a real app_users row with uid=NULL, active=false, and a
+// preset role/email/name. The invitee's real Firebase UID is bound on their
+// first VERIFIED sign-in (see bindInvite + lib/auth/guards.getSessionUser).
+// UID remains the durable, canonical key (spec §3) — email is used ONCE only to
+// match the pending invite, then the UID is authoritative forever.
+// ---------------------------------------------------------------------------
+
+/** Thrown by createInvite when an open invite already exists for the email. */
+export class InviteAlreadyExistsError extends Error {
+  constructor(email: string) {
+    super(`An open invite already exists for ${email}.`);
+    this.name = "InviteAlreadyExistsError";
+  }
+}
+
+/** The open invite (uid IS NULL) for a lower-cased email, or null. */
+export async function getPendingInviteByEmail(
+  email: string,
+  client?: Queryable,
+): Promise<AppUserRow | null> {
+  const { rows } = await executor(client).query<AppUserRow>(
+    `SELECT ${USER_COLUMNS} FROM app_users
+      WHERE uid IS NULL AND lower(email) = lower($1)`,
+    [email],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Create a pending invite (uid=NULL, active=false). Email is stored lower-cased.
+ * Rejects with InviteAlreadyExistsError if an open invite already exists for the
+ * address (pre-checked, and backstopped by the `app_users_pending_email_key`
+ * partial unique index which surfaces Postgres error 23505).
+ */
+export async function createInvite(
+  input: AppUserInviteInsert,
+  client?: Queryable,
+): Promise<AppUserRow> {
+  const email = input.email.toLowerCase();
+
+  const existing = await getPendingInviteByEmail(email, client);
+  if (existing) throw new InviteAlreadyExistsError(email);
+
+  try {
+    const { rows } = await executor(client).query<AppUserRow>(
+      `INSERT INTO app_users (uid, email, name, role, active, created_at, updated_at)
+       VALUES (NULL, $1, $2, $3, false, now(), now())
+       RETURNING ${USER_COLUMNS}`,
+      [email, input.name ?? null, input.role],
+    );
+    return rows[0];
+  } catch (err) {
+    // Race backstop: the partial unique index rejects a concurrent duplicate.
+    if (isUniqueViolation(err)) throw new InviteAlreadyExistsError(email);
+    throw err;
+  }
+}
+
+/**
+ * Atomically bind a real UID to the matching pending invite: attach the UID, set
+ * active=true, refresh name/last_login. Returns the bound row, or null if no open
+ * invite matched. Race-safe: the single `UPDATE ... WHERE uid IS NULL` is atomic,
+ * so one invite binds at most once — a second concurrent bind finds no open row.
+ */
+export async function bindInvite(
+  input: AppUserBindInput,
+  client?: Queryable,
+): Promise<AppUserRow | null> {
+  const { rows } = await executor(client).query<AppUserRow>(
+    `UPDATE app_users
+        SET uid = $2,
+            name = COALESCE($3, name),
+            active = true,
+            last_login = now(),
+            updated_at = now()
+      WHERE uid IS NULL AND lower(email) = lower($1)
+      RETURNING ${USER_COLUMNS}`,
+    [input.email, input.uid, input.name ?? null],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Cancel a pending invite by id. Hard-scoped to `uid IS NULL` so a bound account
+ * can never be deleted this way (bound accounts are deactivated, never deleted).
+ * Returns true if a pending row was removed.
+ */
+export async function revokeInvite(
+  id: string,
+  client?: Queryable,
+): Promise<boolean> {
+  const result = await executor(client).query(
+    `DELETE FROM app_users WHERE id = $1 AND uid IS NULL`,
+    [id],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** True for a Postgres unique-violation (SQLSTATE 23505). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
+  );
 }

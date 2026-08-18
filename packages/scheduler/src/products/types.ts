@@ -238,7 +238,8 @@ export type UserRole = "scheduler" | "admin";
 
 export interface AppUserRow {
   id: string;
-  uid: string;
+  /** Firebase UID, or NULL for a pending invite awaiting first sign-in (P6.6). */
+  uid: string | null;
   email: string | null;
   name: string | null;
   role: UserRole;
@@ -249,11 +250,26 @@ export interface AppUserRow {
 }
 
 export interface AppUserInsert {
+  /** Required for the bootstrap-first-admin / upsert-by-UID path. */
   uid: string;
   email?: string | null;
   name?: string | null;
   role: UserRole;
   active?: boolean;
+}
+
+/** Admin-created pending invite (P6.6): no UID yet; email is lower-cased. */
+export interface AppUserInviteInsert {
+  email: string;
+  name?: string | null;
+  role: UserRole;
+}
+
+/** First-verified-sign-in binding of a real UID to a pending invite (P6.6). */
+export interface AppUserBindInput {
+  email: string;
+  uid: string;
+  name?: string | null;
 }
 
 // ---------------------------------------------------------------------------

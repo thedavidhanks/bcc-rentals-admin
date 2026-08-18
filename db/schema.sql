@@ -67,9 +67,17 @@ CREATE INDEX IF NOT EXISTS admin_audit_log_created_idx ON admin_audit_log (creat
 
 -- 5. Admin/scheduler accounts. Firebase UID is the durable account id; role is the
 --    canonical permission store (see spec §3). Email/name are for display only.
+--
+--    P6.6 (invite-by-email onboarding): `uid` is NULLABLE. A pending invite is a
+--    real row with uid=NULL / active=false whose UID is bound on the invitee's
+--    first verified sign-in. UID remains the durable, canonical key — email is
+--    used ONCE only to match a pending invite, never as the ongoing key (spec §3).
+--    Fresh apply produces the correct end state (no NOT NULL, no inline UNIQUE);
+--    the ALTER/DROP/CREATE-INDEX below reconcile a branch that already has the old
+--    `uid text UNIQUE NOT NULL` shape. Every statement is idempotent + re-runnable.
 CREATE TABLE IF NOT EXISTS app_users (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  uid        text UNIQUE NOT NULL,           -- Firebase Authentication UID
+  uid        text,                           -- Firebase Authentication UID (NULL = pending invite)
   email      text,                           -- lowercase; for display/contact, not the key
   name       text,
   role       text NOT NULL CHECK (role IN ('scheduler', 'admin')),
@@ -79,3 +87,17 @@ CREATE TABLE IF NOT EXISTS app_users (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS app_users_email_idx ON app_users (lower(email));
+
+-- P6.6 reconciliation on an already-applied branch: drop the NOT NULL and the
+-- inline column UNIQUE constraint (Postgres auto-names the inline `UNIQUE(uid)`
+-- constraint `app_users_uid_key`), then re-express uniqueness as a PARTIAL unique
+-- index so multiple pending invites (uid IS NULL) can coexist while bound UIDs
+-- stay unique.
+ALTER TABLE app_users ALTER COLUMN uid DROP NOT NULL;
+ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_uid_key;
+CREATE UNIQUE INDEX IF NOT EXISTS app_users_uid_key
+  ON app_users (uid) WHERE uid IS NOT NULL;
+
+-- At most one OPEN invite (uid IS NULL) per email address, case-insensitively.
+CREATE UNIQUE INDEX IF NOT EXISTS app_users_pending_email_key
+  ON app_users (lower(email)) WHERE uid IS NULL;

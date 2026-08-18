@@ -80,6 +80,7 @@ describe("dev-bypass createSession + verifySession round-trip", () => {
     expect(identity).toEqual({
       uid: "dev-admin",
       email: "dev-admin@dev.local",
+      email_verified: true, // dev-bypass identities are treated as verified (P6.6)
       role: "admin",
     });
   });
@@ -97,6 +98,7 @@ describe("dev-bypass createSession + verifySession round-trip", () => {
     expect(identity).toEqual({
       uid: "u-42",
       email: "sched@bachmancc.org",
+      email_verified: true, // dev-bypass identities are treated as verified (P6.6)
       role: "scheduler",
     });
   });
@@ -179,7 +181,12 @@ describe("real Firebase path (P4.2, firebase-admin mocked)", () => {
       "firebase-session-cookie",
       true,
     );
-    expect(identity).toEqual({ uid: "fb-9", email: "staff@bachmancc.org" });
+    // The mocked decoded token has no email_verified → defaults to false (P6.6).
+    expect(identity).toEqual({
+      uid: "fb-9",
+      email: "staff@bachmancc.org",
+      email_verified: false,
+    });
   });
 
   it("verifySession returns null for an invalid/revoked session cookie", async () => {

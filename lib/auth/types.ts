@@ -30,5 +30,11 @@ export interface SessionUser {
 export interface SessionIdentity {
   uid: string;
   email: string | null;
+  /**
+   * Whether Firebase reports the token's email as verified. Gates invite binding
+   * (P6.6): an unverified email must NOT bind a pending invite (prevents invite
+   * takeover). The dev-bypass stub treats itself as verified.
+   */
+  email_verified: boolean;
   role?: UserRole;
 }

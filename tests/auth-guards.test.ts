@@ -33,13 +33,24 @@ function mockAll(opts: {
   vi.doMock("../lib/auth/session", () => ({ verifySession }));
 
   const getUserByUid = vi.fn(async () => opts.dbUser ?? null);
-  vi.doMock("../lib/repositories/app-users", () => ({ getUserByUid }));
+  const bindInvite = vi.fn(async () => null);
+  vi.doMock("../lib/repositories/app-users", () => ({ getUserByUid, bindInvite }));
+
+  const writeAuditLog = vi.fn(async () => ({}));
+  vi.doMock("../lib/repositories/audit-log", () => ({ writeAuditLog }));
+
+  // getSessionUser's invite-bind path (P6.6) runs inside withTransaction; give it
+  // a client whose query is a no-op so the (rare) bind path doesn't hit a real DB.
+  const withTransaction = vi.fn(async (fn: (client: unknown) => unknown) =>
+    fn({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }),
+  );
+  vi.doMock("../lib/db", () => ({ withTransaction }));
 
   vi.doMock("../lib/env", () => ({
     env: { ALLOWED_EMAIL_DOMAIN: opts.allowedDomain },
   }));
 
-  return { verifySession, getUserByUid, redirect };
+  return { verifySession, getUserByUid, bindInvite, writeAuditLog, redirect };
 }
 
 function makeRow(over: Partial<AppUserRow> = {}): AppUserRow {
@@ -72,7 +83,12 @@ describe("getSessionUser", () => {
 
   it("dev-bypass: trusts the role in the stub identity (no DB lookup)", async () => {
     const { getUserByUid } = mockAll({
-      identity: { uid: "dev-admin", email: "dev-admin@dev.local", role: "admin" },
+      identity: {
+        uid: "dev-admin",
+        email: "dev-admin@dev.local",
+        email_verified: true,
+        role: "admin",
+      },
     });
     const { getSessionUser } = await import("../lib/auth/guards");
     expect(await getSessionUser()).toEqual({
@@ -85,7 +101,7 @@ describe("getSessionUser", () => {
 
   it("real path: resolves role from app_users by UID", async () => {
     const { getUserByUid } = mockAll({
-      identity: { uid: "uid-1", email: "person@bachmancc.org" },
+      identity: { uid: "uid-1", email: "person@bachmancc.org", email_verified: true },
       dbUser: makeRow({ role: "admin" }),
     });
     const { getSessionUser } = await import("../lib/auth/guards");
@@ -99,7 +115,7 @@ describe("getSessionUser", () => {
 
   it("denies an unknown user (no app_users row)", async () => {
     mockAll({
-      identity: { uid: "ghost", email: "ghost@x.org" },
+      identity: { uid: "ghost", email: "ghost@x.org", email_verified: false },
       dbUser: null,
     });
     const { getSessionUser } = await import("../lib/auth/guards");
@@ -108,7 +124,7 @@ describe("getSessionUser", () => {
 
   it("denies a deactivated user", async () => {
     mockAll({
-      identity: { uid: "uid-1", email: "person@bachmancc.org" },
+      identity: { uid: "uid-1", email: "person@bachmancc.org", email_verified: true },
       dbUser: makeRow({ active: false }),
     });
     const { getSessionUser } = await import("../lib/auth/guards");
@@ -117,7 +133,7 @@ describe("getSessionUser", () => {
 
   it("enforces ALLOWED_EMAIL_DOMAIN when configured", async () => {
     mockAll({
-      identity: { uid: "uid-1", email: "person@evil.com" },
+      identity: { uid: "uid-1", email: "person@evil.com", email_verified: true },
       dbUser: makeRow({ email: "person@evil.com" }),
       allowedDomain: "bachmancc.org",
     });
@@ -127,7 +143,7 @@ describe("getSessionUser", () => {
 
   it("allows a matching ALLOWED_EMAIL_DOMAIN", async () => {
     mockAll({
-      identity: { uid: "uid-1", email: "Person@BachmanCC.org" },
+      identity: { uid: "uid-1", email: "Person@BachmanCC.org", email_verified: true },
       dbUser: makeRow({ email: "Person@BachmanCC.org" }),
       allowedDomain: "bachmancc.org",
     });
@@ -145,14 +161,14 @@ describe("requireScheduler", () => {
   });
 
   it("allows a scheduler", async () => {
-    mockAll({ identity: { uid: "u", email: null, role: "scheduler" } });
+    mockAll({ identity: { uid: "u", email: null, email_verified: true, role: "scheduler" } });
     const { requireScheduler } = await import("../lib/auth/guards");
     const user = await requireScheduler();
     expect(user.role).toBe("scheduler");
   });
 
   it("allows an admin (admins have scheduler powers)", async () => {
-    mockAll({ identity: { uid: "u", email: null, role: "admin" } });
+    mockAll({ identity: { uid: "u", email: null, email_verified: true, role: "admin" } });
     const { requireScheduler } = await import("../lib/auth/guards");
     const user = await requireScheduler();
     expect(user.role).toBe("admin");
@@ -167,13 +183,13 @@ describe("requireAdmin", () => {
   });
 
   it("throws ForbiddenError for a scheduler", async () => {
-    mockAll({ identity: { uid: "u", email: null, role: "scheduler" } });
+    mockAll({ identity: { uid: "u", email: null, email_verified: true, role: "scheduler" } });
     const { requireAdmin, ForbiddenError } = await import("../lib/auth/guards");
     await expect(requireAdmin()).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("allows an admin", async () => {
-    mockAll({ identity: { uid: "u", email: null, role: "admin" } });
+    mockAll({ identity: { uid: "u", email: null, email_verified: true, role: "admin" } });
     const { requireAdmin } = await import("../lib/auth/guards");
     const user = await requireAdmin();
     expect(user.role).toBe("admin");

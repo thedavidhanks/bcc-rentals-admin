@@ -156,6 +156,9 @@ function decodeDevCookie(value: string): SessionIdentity | null {
     return {
       uid: parsed.uid,
       email: typeof parsed.email === "string" ? parsed.email : null,
+      // Dev-bypass identities are trusted locally, so treat them as verified —
+      // this lets the invite-binding path (P6.6) be exercised without Firebase.
+      email_verified: true,
       role: parsed.role,
     };
   } catch {
@@ -194,7 +197,12 @@ async function verifyRealSession(
   const auth = getAdminAuth();
   try {
     const decoded = await auth.verifySessionCookie(value, /* checkRevoked */ true);
-    return { uid: decoded.uid, email: decoded.email ?? null };
+    return {
+      uid: decoded.uid,
+      email: decoded.email ?? null,
+      // Surfaced for P6.6 invite binding — only a verified email may bind.
+      email_verified: decoded.email_verified ?? false,
+    };
   } catch {
     return null;
   }
