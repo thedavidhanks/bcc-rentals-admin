@@ -28,8 +28,12 @@ try {
 }
 
 // Prefer the dev-branch endpoint. Fall back to DATABASE_URL only with a loud warning.
-const devUrl = process.env.DATABASE_URL_DEV;
-const prodUrl = process.env.DATABASE_URL;
+// Treat an empty string the same as unset: passing `DATABASE_URL_DEV=` inline (to
+// force the prod fallback) must count as "no dev URL". Node 22's loadEnvFile does
+// not overwrite an inline-set var, so it would otherwise stay "" and, via ??, be
+// mistaken for a real value.
+const devUrl = process.env.DATABASE_URL_DEV || undefined;
+const prodUrl = process.env.DATABASE_URL || undefined;
 const connectionString = devUrl ?? prodUrl;
 const usingProd = !devUrl && Boolean(prodUrl);
 
