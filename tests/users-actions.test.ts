@@ -65,12 +65,12 @@ vi.mock("@/lib/repositories/app-users", () => ({
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import {
-  initialUsersActionState,
   inviteUserAction,
   revokeInviteAction,
   setActiveAction,
   setRoleAction,
 } from "@/app/users/actions";
+import { initialUsersActionState } from "@/app/users/state";
 
 function form(fields: Record<string, string | string[]>): FormData {
   const fd = new FormData();

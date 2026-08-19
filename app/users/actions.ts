@@ -16,6 +16,7 @@ import {
   setUserActive,
   updateUserRole,
 } from "@/lib/repositories/app-users";
+import type { UsersActionState } from "./state";
 
 // User management server actions (execution-plan P6.6, spec §3/§6/§7). Every
 // action is ADMIN-ONLY — requireAdmin() runs FIRST, before any parsing or DB
@@ -27,17 +28,8 @@ import {
 // roll back if the change would leave zero admins — this closes the race between
 // two admins acting at once (a pre-check alone can't). Deactivate, never delete.
 
-// ---------------------------------------------------------------------------
-// Result state (shape consumed by useActionState in the client form)
-// ---------------------------------------------------------------------------
-
-export interface UsersActionState {
-  status: "idle" | "success" | "error";
-  message?: string;
-  fieldErrors?: Record<string, string>;
-}
-
-export const initialUsersActionState: UsersActionState = { status: "idle" };
+// Result state (shape consumed by useActionState in the client form) lives in
+// ./state — a "use server" file may only export async functions.
 
 /** Rolling back to keep at least one active admin (spec §6). */
 class LastAdminError extends Error {

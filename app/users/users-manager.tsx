@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import {
-  initialUsersActionState,
   inviteUserAction,
   revokeInviteAction,
   setActiveAction,
   setRoleAction,
 } from "./actions";
+import { initialUsersActionState } from "./state";
 import styles from "./page.module.css";
 
 // Users admin client UI (execution-plan P6.6, spec §6/§7). Admin-only — the page

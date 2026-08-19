@@ -233,8 +233,10 @@ These gate specific phases. Surface them to the human; do not guess.
 | P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides.                               | code-writer   | P3.1             | TODO   |
 | P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer   | P3.1, P4.3       | TODO   |
 | P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`.                                                                                                 | code-writer   | P3.1, P4.3       | TODO   |
-| P6.6 | User management (admin): CRUD `app_users` (set role, deactivate); guard against removing last active admin; re-sync custom claim on change.                                   | code-writer   | P3.1, P4.3       | TODO   |
+| P6.6 | User management (admin): CRUD `app_users` (set role, deactivate); guard against removing last active admin; re-sync custom claim on change. **Extended 2026-08-18 with invite-by-email onboarding** — admin invites by email+name+role (pending row `uid=NULL`, `active=false`); UID binds on first sign-in iff `email_verified=true` + email matches. **Needs 1 schema change (make `app_users.uid` nullable) + a login-flow change.** UID stays canonical (spec §3); email is a one-time binding key only. Work order: [docs/prompts/P6.6-user-management.md](./prompts/P6.6-user-management.md). | code-writer   | P3.1, P4.3       | **DONE (2026-08-19)** — admin CRUD (invite/revoke/set-role/activate) + invite-by-email onboarding shipped and human-approved. Schema migration (nullable `uid` + partial unique indexes on non-null `uid` and pending-invite email) applied to **dev + prod** and verified live. `email_verified` threaded through `SessionIdentity`; UID binds on first verified sign-in (race-safe via `WHERE uid IS NULL`). Last-active-admin guard is transactional (re-check inside the mutation txn). Every mutation writes `admin_audit_log`. `"use server"` split: result-state moved to `app/users/state.ts` (a "use server" file may only export async fns). Verified: typecheck + lint clean, users-actions tests 26/26. **KNOWN LIMITATION:** "Send invite" creates a pending row only — it does **not** email anyone (no mail integration exists); the invitee must be told the URL out-of-band → tracked as P6.9. |
 | P6.7 | Full flow tests: booking (single/multi/recurring), price edits, product lifecycle, role guards (server-side denial).                                                          | test-engineer | P6.1–P6.6        | TODO   |
+| P6.8 | **Invite-exception to the email-domain guard (MEDIUM).** `emailDomainAllowed` in [lib/auth/guards.ts](../lib/auth/guards.ts) currently blocks any non-`ALLOWED_EMAIL_DOMAIN` email at bind time, so an invited outsider creates a pending row but is then **denied on first sign-in** — inviting outside domains doesn't work end-to-end. Change the bind path to allow binding when **either** the domain matches **or** an explicit pending invite exists for that exact (lower-cased) email. Keeps the domain wall up for everyone else (defense-in-depth); only opens it for people an admin explicitly invited. Do **not** blank `ALLOWED_EMAIL_DOMAIN` (drops the wall for the whole app). Useful for testing with other users. Audit the bind as today. | code-writer | P6.6 | TODO (medium priority) |
+| P6.9 | **Real invitation email (LOW / optional).** Make "Send invite" actually notify the invitee (currently it only writes a pending `app_users` row — see P6.6 known limitation). Scope: pick a mail provider (e.g. Resend/SendGrid), add its key to Secret Manager + Zod env, send from `inviteUserAction` **after** the DB commit (best-effort — a send failure must not roll back the committed invite), include the sign-in URL. **Optional** — launch has ≤10 users, so onboarding can be done manually (tell the invitee the URL out-of-band). | code-writer | P6.6 | TODO (low priority, optional) |
 
 ### P7 — Cross-system verification
 
@@ -342,7 +344,7 @@ with the **P6 UI wave** — the CRUD screens that consume all of the above.
 | P6.3 | Update Prices — CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row. | code-writer | Deps P3.1 DONE. Independent of P6.1 — parallelizable. |
 | P6.4 | Products (admin) — Add/Edit (deactivate not delete, `updated_at=now()`, unique slug). | code-writer | Deps P3.1, P4.3 DONE. |
 | P6.5 | Categories (admin) — CRUD `categories` + assign via `item_categories`. | code-writer | Deps P3.1, P4.3 DONE. |
-| P6.6 | User management (admin) — CRUD `app_users`; guard last active admin. | code-writer | Deps P3.1, P4.3 DONE. |
+| P6.6 | User management (admin) — CRUD `app_users`; guard last active admin. **+ invite-by-email onboarding** (see the expanded P6.6 row + [work order](./prompts/P6.6-user-management.md)). | code-writer | Deps P3.1, P4.3 DONE. **Now includes a schema change (nullable `uid`, human-applied dev-first) + login-flow binding hook** — do it end-to-end on one branch (schema→repo→auth→UI), don't fan out across those files. |
 | P9.3→P9.4 | Refactor storefront **and** admin to import from `@bcc/scheduler`; remove duplicated copies; reconcile `TODO(P9)` markers; run both suites. | code-writer | Deps P9.2 DONE. Cross-repo (touches the storefront) — heavier; can trail the P6 wave. |
 
 Wire `writeAuditLog` into **every** mutating action in this wave (P3.2 writer exists).
@@ -609,3 +611,44 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   Two `// TODO(P9)` markers added on the new `client?` params (reconcile the admin-only txn-client
   extension against the storefront under P9.3/P9.4). **Unblocks P6.2** (Edit Reservation, now the
   next reservation task) and **P7.1** (live-DB cross-system check). Marked P6.1 DONE.
+- 2026-08-18 — **P6.6 scoped + expanded to invite-by-email onboarding.** Confirmed P6.6 READY
+  (deps P3.1 + P4.3 DONE; `app_users` on dev+prod; `countActiveAdmins()` already in the repo for
+  the last-admin guard) and wrote the work order [docs/prompts/P6.6-user-management.md](./prompts/P6.6-user-management.md)
+  for a PM/work-distributor agent (UI + function testing, task assignment, guardrails, DoD).
+  **Design change (human-decided):** replaced the awkward "admin pastes a 28-char Firebase UID"
+  add-user flow with **invite-by-email** — an admin invites by email+name+role, creating a
+  **pending** `app_users` row (`uid=NULL`, `active=false`); on the invitee's first sign-in the
+  server **binds** their real UID and activates the account. **Two locked decisions:** (1) bind
+  **only if `email_verified=true`** and the token email matches the invite (unverified never binds
+  → no invite takeover); domain still enforced by the existing guard, not re-checked at bind. (2)
+  Storage = **make `app_users.uid` nullable** (idempotent DDL: drop NOT NULL + partial unique
+  index on non-null `uid` + partial unique index on pending-invite email). Spec §3 reconciled —
+  **UID remains the canonical key; email is a one-time binding key only.** New work vs. the
+  original P6.6 line: a schema migration (human-applied, **dev branch first**, then prod on
+  approval — the app errors on invite creation until applied), repo fns
+  (`createInvite`/`getPendingInviteByEmail`/`bindInvite`/`revokeInvite` + pending/bound split in
+  `listUsers`), threading `email_verified` through `SessionIdentity` (`verifyRealSession` returns
+  only `{uid,email}` today) + a binding hook in `getSessionUser()`, and the Users UI/actions.
+  Guidance: **one code-writer end-to-end** (schema→repo→auth→UI edit overlapping files — no
+  fan-out) → test-engineer for the binding security matrix + last-admin guard; `model: opus`,
+  `isolation: worktree`. No code or DDL applied yet — work order only.
+- 2026-08-19 — **P6.6 DONE — user management + invite-by-email shipped and human-approved.**
+  Built via subagents (schema→repo→auth→UI on one branch), integrated, verified, and merged.
+  Delivered: admin Users page (`app/users/*` — invite / revoke / set-role / activate-deactivate),
+  invite-by-email onboarding (pending row `uid=NULL` → binds real UID on first **verified** sign-in
+  via `WHERE uid IS NULL`, `email_verified` threaded through `SessionIdentity`), transactional
+  last-active-admin guard, and `admin_audit_log` on every mutation. **Schema migration applied to
+  dev + prod and verified live:** `app_users.uid` made nullable, `app_users_uid_key` rebuilt as a
+  partial unique index `WHERE uid IS NOT NULL`, plus `app_users_pending_email_key` unique on
+  `lower(email) WHERE uid IS NULL` (both branches: `uid` is_nullable=YES, both indexes present).
+  Fixed `scripts/db/apply-schema.mjs` env resolution (empty-string `DATABASE_URL_DEV=` now counts
+  as unset via `|| undefined`, so `DATABASE_URL_DEV= APPLY_TO_PROD=1 npm run db:apply` correctly
+  targets prod). Fixed a Next.js `"use server"` violation by moving the result-state
+  interface/const out of `app/users/actions.ts` into new `app/users/state.ts` (a "use server" file
+  may only export async functions). Verified: `typecheck` + `lint` clean, users-actions tests 26/26.
+  **Known limitation surfaced to human:** no email is sent — "Send invite" only creates the pending
+  row; onboarding is out-of-band today. Human approved the changes. **Added two follow-ups:**
+  **P6.8** (medium) — invite-exception to the email-domain guard so invited outside-domain users can
+  actually bind (keeps the wall for everyone else; needed for testing with other users); **P6.9**
+  (low, optional) — a real invitation email, deferred since launch has ≤10 users and manual
+  onboarding suffices.
