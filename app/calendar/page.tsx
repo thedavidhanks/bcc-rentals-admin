@@ -207,16 +207,19 @@ export default async function CalendarPage({
           ]
             .filter(Boolean)
             .join("\n");
-          return (
-            <div
-              key={reservation.id}
-              className={`${styles.bar} ${statusClass(reservation.status)}`}
-              style={{
-                gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
-                gridRow: index + 1,
-              }}
-              title={title}
-            >
+          // Bars with a group_id link to the Edit Reservation page (P6.2);
+          // storefront confirmed rows may have no group — those stay
+          // non-clickable. The rendered box is identical either way.
+          const barProps = {
+            className: `${styles.bar} ${statusClass(reservation.status)}`,
+            style: {
+              gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
+              gridRow: index + 1,
+            },
+            title,
+          };
+          const barBody = (
+            <>
               {bar.continuesBefore && (
                 <span className={styles.cont} aria-label="continues from previous week">
                   ‹
@@ -232,6 +235,19 @@ export default async function CalendarPage({
                   ›
                 </span>
               )}
+            </>
+          );
+          return reservation.group_id ? (
+            <Link
+              key={reservation.id}
+              href={`/reservations/${reservation.group_id}`}
+              {...barProps}
+            >
+              {barBody}
+            </Link>
+          ) : (
+            <div key={reservation.id} {...barProps}>
+              {barBody}
             </div>
           );
         })}

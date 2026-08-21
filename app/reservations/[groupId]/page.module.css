@@ -1,0 +1,265 @@
+/* Edit Reservation page (P6.2). Mirrors app/reservations/new/page.module.css so
+   the edit page matches the add page visually, plus a few edit-specific classes
+   (cancelledBanner, seriesSummary, deleteSection, success, hint, dangerBtn). */
+
+.page {
+  font-family: system-ui, sans-serif;
+  padding: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.rangeLabel {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #666;
+}
+
+.sectionTitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #222;
+}
+
+.navBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.navBtn:hover {
+  background: #f2f2f2;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.section {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 0 0 1.25rem;
+}
+
+.section legend {
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0 0.4rem;
+  color: #333;
+}
+
+.lineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.lineRow:last-of-type {
+  border-bottom: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #444;
+}
+
+.field span {
+  font-weight: 500;
+}
+
+.field select,
+.field input,
+.field textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+}
+
+.qtyInput {
+  width: 5rem;
+}
+
+.submitBtn {
+  border: 1px solid #1a5fb4;
+  background: #1a5fb4;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.submitBtn:hover {
+  background: #164e97;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dangerBtn {
+  border: 1px solid #912d2b;
+  background: #912d2b;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dangerBtn:hover {
+  background: #7a2523;
+}
+
+.dangerBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.notesField {
+  margin-top: 0.75rem;
+}
+
+.notesField textarea {
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.deleteActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0 0 0.75rem;
+}
+
+.fieldError {
+  color: #912d2b;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
+}
+
+.error {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0b4b4;
+  background: #fdf0f0;
+  color: #912d2b;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.success {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #b4d8b4;
+  background: #f0faf0;
+  color: #1e5d1e;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.conflictBox {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0b4b4;
+  background: #fdf0f0;
+  color: #912d2b;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.conflictBox ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.cancelledBanner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e0c94b;
+  background: #fdf9e3;
+  color: #6b5900;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.seriesSummary {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #b8cfe6;
+  background: #f0f6fd;
+  color: #1a3f66;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.seriesCount {
+  color: #3a5a7a;
+}
+
+.deleteSection {
+  border-color: #e0b4b4;
+  background: #fffafa;
+}
