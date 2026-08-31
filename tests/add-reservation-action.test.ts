@@ -50,7 +50,8 @@ vi.mock("@/lib/repositories/items", () => ({ listItems }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-import { createReservationAction, initialCreateReservationState } from "@/app/reservations/new/actions";
+import { createReservationAction } from "@/app/reservations/new/actions";
+import { initialCreateReservationState } from "@/app/reservations/new/types";
 
 const rows = <T>(...r: T[]) => ({ rows: r });
 

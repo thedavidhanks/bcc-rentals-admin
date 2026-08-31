@@ -20,6 +20,7 @@ import {
   type RecurrenceFreq,
   type RecurrenceRule,
 } from "@/lib/scheduler/recurrence";
+import type { ConflictLine, CreateReservationState } from "./types";
 
 // Add Reservation server action (execution-plan task P6.1, spec §7/§8/§9).
 //
@@ -36,40 +37,6 @@ import {
 // easternInstant (offset-correct across DST). No floats, no stored offsets.
 
 const MINUTES_PER_DAY = 24 * 60;
-
-// ---------------------------------------------------------------------------
-// Result state (shape consumed by useActionState in reservation-form.tsx)
-// ---------------------------------------------------------------------------
-
-/** One (item × occurrence) window that failed the capacity check. */
-export interface ConflictLine {
-  itemSlug: string;
-  /** Eastern date label of the occurrence, e.g. "2026-08-01". */
-  date: string;
-  requested: number;
-  available: number;
-}
-
-export interface CreateReservationState {
-  status: "idle" | "success" | "error";
-  /** Top-level message (validation error, conflict summary, or success note). */
-  message?: string;
-  /** Field-level validation errors keyed by a form path. */
-  fieldErrors?: Record<string, string>;
-  /** Populated on an all-or-nothing capacity conflict (nothing was committed). */
-  conflicts?: ConflictLine[];
-  /**
-   * True when recurrence expansion hit a cap (horizon / max) before the rule's
-   * own end condition — surfaced so the user knows occurrences were dropped.
-   */
-  truncated?: boolean;
-  /** Count of reservation rows written on success. */
-  reservationCount?: number;
-}
-
-export const initialCreateReservationState: CreateReservationState = {
-  status: "idle",
-};
 
 // ---------------------------------------------------------------------------
 // Zod schema for the parsed form

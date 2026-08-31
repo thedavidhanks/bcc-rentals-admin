@@ -1,0 +1,1 @@
+# Keeps the public/ directory in git so the Dockerfile's `COPY public` step works.

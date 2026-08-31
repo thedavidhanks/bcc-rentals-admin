@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import {
-  createReservationAction,
-  initialCreateReservationState,
-} from "./actions";
+import { createReservationAction } from "./actions";
+import { initialCreateReservationState } from "./types";
 import styles from "./page.module.css";
 
 // Add Reservation client form (execution-plan P6.1, spec §7).
