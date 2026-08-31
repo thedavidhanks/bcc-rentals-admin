@@ -229,7 +229,7 @@ These gate specific phases. Surface them to the human; do not guess.
 | ID   | Task                                                                                                                                                                          | Owner         | Depends          | Status |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------- | ------ |
 | P6.1 | Add Reservation: multi-product line items + recurrence controls; on submit run race-safe check across all (item × occurrence), no partial commit.                             | code-writer   | P2.2, P2.4, P5.2 | DONE (`1ab94e4`, merged to `master` `e56b0fa`) |
-| P6.2 | Edit Reservation: edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`.                                                       | code-writer   | P6.1             | TODO   |
+| P6.2 | Edit Reservation: edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`.                                                       | code-writer   | P6.1             | **DONE (2026-08-22)** — page + actions merged to `master` (`e045dea`). Contact/notes edit (no engine); line/date/time edit via cancel-then-rebook through `scheduler.createBooking` (race-safe, rolls back on conflict, mints new `group_id`, preserves `series_id`); delete-instance / delete-series (future-only); cancel≠DELETE; audit on every mutation; calendar bars link to `/reservations/[groupId]`. 225 tests green (+23 P6.2). **Unblocks P7.1.** |
 | P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides.                               | code-writer   | P3.1             | TODO   |
 | P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer   | P3.1, P4.3       | TODO   |
 | P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`.                                                                                                 | code-writer   | P3.1, P4.3       | TODO   |
@@ -340,7 +340,7 @@ with the **P6 UI wave** — the CRUD screens that consume all of the above.
 | Task | What | Owner | Notes |
 |---|---|---|---|
 | ~~**P6.1**~~ | ~~Add Reservation~~ — **DONE 2026-08-05** (`1ab94e4`, merged to `master` `e56b0fa`). Multi-product line items + recurrence, race-safe all-or-nothing write, series + audit committed in one txn. Unblocks **P6.2** (Edit Reservation) and **P7.1** (live-DB cross-system check). | code-writer | — |
-| **P6.2** | **Edit Reservation** — edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`. **Now the next reservation task** (P6.1 landed). | code-writer | Dep P6.1 DONE. |
+| ~~**P6.2**~~ | ~~Edit Reservation~~ — **DONE 2026-08-22** (`e045dea`, merged to `master`). Contact/notes edit (no engine); line/date/time edit via cancel-then-rebook through `scheduler.createBooking` (race-safe, rolls back on conflict); delete-instance / delete-series (future-only); cancel≠DELETE; audit on every mutation; calendar bars link to the edit page. 225 tests green (+23 P6.2). **Unblocks P7.1.** | code-writer | Dep P6.1 DONE. |
 | P6.3 | Update Prices — CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row. | code-writer | Deps P3.1 DONE. Independent of P6.1 — parallelizable. |
 | P6.4 | Products (admin) — Add/Edit (deactivate not delete, `updated_at=now()`, unique slug). | code-writer | Deps P3.1, P4.3 DONE. |
 | P6.5 | Categories (admin) — CRUD `categories` + assign via `item_categories`. | code-writer | Deps P3.1, P4.3 DONE. |
@@ -652,3 +652,26 @@ wave, assemble one integration branch, verify the **combined** tree, then hand o
   actually bind (keeps the wall for everyone else; needed for testing with other users); **P6.9**
   (low, optional) — a real invitation email, deferred since launch has ≤10 users and manual
   onboarding suffices.
+- 2026-08-22 — **P6.2 DONE — Edit Reservation shipped and merged to `master` (`e045dea`).** Built as
+  a parallel wave (work-distributor): one shared contract slice (`app/reservations/[groupId]/types.ts`
+  + `loader.ts`) then B/C/D concurrently in per-slice worktrees (`model: opus`, `isolation: worktree`) —
+  server actions (`actions.ts`), page + form + calendar entry point, and tests. Assembled onto
+  `integration/p6.2-edit-reservation` and verified on the **combined** tree before hand-off; human ran
+  the merge. Delivered (spec §7/§9): loads a booking by `group_id`, renders all line items + contact/
+  notes + one-off-vs-series; **contact/notes/title edit bypasses the booking engine**; **line/date/time
+  edit = cancel-then-rebook in ONE txn** (`cancelReservationsByGroup` → `scheduler.createBooking`) so
+  the §8 race-safe path (advisory lock → capacity recheck → insert) protects every capacity change —
+  on `GroupBookingConflictError` the txn rolls back, the original booking is intact, conflict lines
+  surface to the UI ("Nothing was changed."). Cancel-then-rebook **mints a new `group_id`** (old rows
+  become cancelled history) but **preserves `series_id`** so a series occurrence stays attached —
+  documented in-code so no one "optimizes" it into a plain UPDATE. Delete offers **delete-this-instance**
+  (`cancelReservationsByGroup`) and, only for a series, **delete-the-whole-series**
+  (`cancelReservationsBySeries`, **future-only by default** — past occurrences kept as history per §9);
+  cancel sets `status='cancelled'`, **never DELETE**. `requireScheduler()` first + `writeAuditLog` in the
+  same txn on every mutation. Calendar bars now link to `/reservations/[groupId]` (only when `group_id`
+  is non-null — storefront confirmed rows stay non-clickable). No schema change (repo fns + engine
+  already existed). Verified on the combined tree: `typecheck` + `lint` clean, `npm test` **225/225
+  (18 files)** (+23 net-new P6.2 tests: 19 action + 4 loader; no DOM tests — repo has no
+  `@testing-library`/jsdom, UI logic covered via loader + `useActionState` result shape), `npm run
+  build` exit 0 (new `/reservations/[groupId]` route present). **Unblocks P7.1** (live-DB cross-system
+  double-booking check).
