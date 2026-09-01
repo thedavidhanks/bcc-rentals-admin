@@ -154,8 +154,9 @@ npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); r
 - **`git merge` needs human approval** here (the permission guard denies it). Agents
   build/verify on a branch and stop; a human runs the merge, then a session marks the
   tasks DONE in the plan.
-- Keep [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) current: update task status and
-  add a dated Progress-log line when work lands. Resume from the first non-`DONE` phase.
+- Keep [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) current: update task status when
+  work lands, and add a dated line to the progress log in [docs/LOG.md](./docs/LOG.md).
+  Resume from the first non-`DONE` phase.
 
 ## Storefront reference files (per spec — repo now available, not vendored here)
 
