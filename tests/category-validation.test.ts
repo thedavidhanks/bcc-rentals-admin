@@ -11,8 +11,19 @@ import {
 // needed — validation.ts is deliberately DB-free (see its header comment).
 
 describe("SLUG_PATTERN — URL-safety", () => {
-  const reject = ["Party Room", "party_room", "-room", "room--tool", "Room", "", "room "];
-  const accept = ["event-add-on", "room", "a1-b2", "chairs200"];
+  const reject = [
+    "Party Room",
+    "party_room",
+    "-room",
+    "room--tool",
+    "Room",
+    "",
+    "room ",
+    "café", // non-ASCII must not sneak through as a "letter"
+    "room-", // trailing hyphen
+    "room.tool", // dot is not a valid separator
+  ];
+  const accept = ["event-add-on", "room", "a1-b2", "chairs200", "123"];
 
   for (const bad of reject) {
     it(`rejects ${JSON.stringify(bad)}`, () => {
@@ -43,6 +54,18 @@ describe("slugify", () => {
       const slug = slugify(name);
       expect(SLUG_PATTERN.test(slug)).toBe(true);
     }
+  });
+
+  it("non-ASCII letters are stripped, not preserved (result may still need editing)", () => {
+    // slugify is a convenience suggestion only (per its docstring) — it does
+    // not transliterate accented/unicode letters, it just drops them.
+    expect(slugify("café")).toBe("caf");
+  });
+
+  it("a name with no ASCII alphanumerics collapses to an empty string (caller must still validate)", () => {
+    // The Zod schema (tested below) is what actually rejects an empty slug —
+    // slugify itself has no non-empty guarantee.
+    expect(slugify("!!!")).toBe("");
   });
 });
 

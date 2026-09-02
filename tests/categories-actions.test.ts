@@ -184,6 +184,16 @@ describe("authorization — requireAdmin throwing propagates for every action", 
       expect(assignItemToCategory).not.toHaveBeenCalled();
       expect(removeItemFromCategory).not.toHaveBeenCalled();
       expect(setItemCategories).not.toHaveBeenCalled();
+      // Not just the mutations — the read-only pre-checks (uniqueness lookups,
+      // the delete-confirm assigned-items lookup, the bulk before-snapshot)
+      // must ALSO never run before requireAdmin resolves. If a future edit
+      // moved requireAdmin() below one of these reads, this would catch it.
+      expect(getCategoryBySlug).not.toHaveBeenCalled();
+      expect(getCategoryById).not.toHaveBeenCalled();
+      expect(listItemsForCategory).not.toHaveBeenCalled();
+      expect(listCategoriesForItem).not.toHaveBeenCalled();
+      expect(withTransaction).not.toHaveBeenCalled();
+      expect(writeAuditLog).not.toHaveBeenCalled();
     });
   }
 });
@@ -318,6 +328,36 @@ describe("updateCategoryAction", () => {
     expect(result.status).toBe("error");
     expect(getCategoryById).not.toHaveBeenCalled();
   });
+
+  it("DB-level unique violation (race between the pre-check and the write) surfaces as a slug field error", async () => {
+    getCategoryById.mockResolvedValue(categoryRow({ id: "cat-1", slug: "room", name: "Room", sort_order: 0 }));
+    getCategoryBySlug.mockResolvedValue(null); // pre-check passes...
+    withTransaction.mockImplementation(async () => {
+      // ...but another writer claims the slug before this transaction commits.
+      const err = new Error("duplicate key value") as Error & { code: string };
+      err.code = "23505";
+      throw err;
+    });
+    const result = await updateCategoryAction(
+      st,
+      form({ id: "cat-1", slug: "rooms", name: "Room", sort_order: "0" }),
+    );
+    expect(result.status).toBe("error");
+    expect(result.fieldErrors?.slug).toBeDefined();
+    expect(writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("category deleted concurrently (updateCategory returns null inside the tx) → generic error, no audit", async () => {
+    getCategoryById.mockResolvedValue(categoryRow({ id: "cat-1", slug: "room", name: "Room", sort_order: 0 }));
+    getCategoryBySlug.mockResolvedValue(null);
+    updateCategory.mockResolvedValue(null);
+    const result = await updateCategoryAction(
+      st,
+      form({ id: "cat-1", slug: "rooms", name: "Room", sort_order: "0" }),
+    );
+    expect(result.status).toBe("error");
+    expect(writeAuditLog).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -382,6 +422,15 @@ describe("deleteCategoryAction", () => {
     expect(result.status).toBe("error");
     expect(getCategoryById).not.toHaveBeenCalled();
   });
+
+  it("deleted concurrently between the confirm check and the write (deleteCategory returns false) → generic error, no audit", async () => {
+    getCategoryById.mockResolvedValue(categoryRow({ id: "cat-1", name: "Room" }));
+    listItemsForCategory.mockResolvedValue([]);
+    deleteCategory.mockResolvedValue(false);
+    const result = await deleteCategoryAction(st, form({ id: "cat-1" }));
+    expect(result.status).toBe("error");
+    expect(writeAuditLog).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -412,6 +461,12 @@ describe("assignItemAction", () => {
 
   it("missing itemId → error, no DB work", async () => {
     const result = await assignItemAction(st, form({ itemId: "", categoryId: "cat-1" }));
+    expect(result.status).toBe("error");
+    expect(assignItemToCategory).not.toHaveBeenCalled();
+  });
+
+  it("missing categoryId → error, no DB work", async () => {
+    const result = await assignItemAction(st, form({ itemId: "item-1", categoryId: "" }));
     expect(result.status).toBe("error");
     expect(assignItemToCategory).not.toHaveBeenCalled();
   });
@@ -474,6 +529,17 @@ describe("setItemCategoriesAction", () => {
 
   it("missing itemId → error, no DB work", async () => {
     const result = await setItemCategoriesAction(st, form({ itemId: "", categoryIds: ["cat-1"] }));
+    expect(result.status).toBe("error");
+    expect(setItemCategories).not.toHaveBeenCalled();
+  });
+
+  it("a blank categoryId in the submitted list → rejected by Zod, no DB work", async () => {
+    // Guards against a malformed/tampered form post (e.g. a stray empty
+    // checkbox value) silently writing a bogus join row.
+    const result = await setItemCategoriesAction(
+      st,
+      form({ itemId: "item-1", categoryIds: ["cat-1", ""] }),
+    );
     expect(result.status).toBe("error");
     expect(setItemCategories).not.toHaveBeenCalled();
   });
