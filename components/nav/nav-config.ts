@@ -11,12 +11,15 @@ export interface NavItem {
 
 /**
  * The global menu-bar entries, in display order (spec §7).
- * Admin-only entries (Categories, Users) are hidden for schedulers here for
- * convenience; real access control lives in the server guards / route actions.
+ * Admin-only entries (Products, Categories, Users) are hidden for schedulers
+ * here for convenience; real access control lives in the server guards /
+ * route actions (`app/**\/page.tsx` calling `requireAdmin`/`requireScheduler`).
+ * `tests/nav-guard-parity.test.ts` asserts this list stays in sync with those
+ * guards — update both together.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Calendar", href: "/calendar" },
-  { label: "Products", href: "/products" },
+  { label: "Products", href: "/products", adminOnly: true },
   { label: "Add Reservation", href: "/reservations/new" },
   { label: "Update Prices", href: "/prices" },
   { label: "Categories", href: "/categories", adminOnly: true },

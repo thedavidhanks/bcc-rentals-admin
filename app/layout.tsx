@@ -21,7 +21,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        {user ? <AppNav items={items} userLabel={user.email} /> : null}
+        {user ? <AppNav items={items} user={{ email: user.email }} /> : null}
         <main className="app-main">{children}</main>
       </body>
     </html>

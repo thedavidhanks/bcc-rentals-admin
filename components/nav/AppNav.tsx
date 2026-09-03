@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { AccountMenu } from "./AccountMenu";
 import type { NavItem } from "./nav-config";
 
 interface AppNavProps {
   /** Menu entries already filtered for the current role (server-side). */
   items: NavItem[];
-  /** Display name / email of the signed-in user, if any. */
-  userLabel?: string | null;
+  /**
+   * The signed-in user's identity, used only to render the account avatar
+   * (initials monogram) and dropdown. `null`/`undefined` hides the account
+   * menu. No `name` field exists on `SessionUser` yet (P11.3 will add one) —
+   * `AccountMenu` already accepts an optional `name` and prefers it.
+   */
+  user?: { name?: string | null; email: string | null } | null;
 }
 
 function isActive(pathname: string, href: string): boolean {
@@ -22,7 +28,7 @@ function isActive(pathname: string, href: string): boolean {
  * breakpoint they collapse behind a hamburger toggle (spec §7). This component
  * makes NO security decisions — it only renders the entries it is handed.
  */
-export function AppNav({ items, userLabel }: AppNavProps) {
+export function AppNav({ items, user }: AppNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -67,8 +73,14 @@ export function AppNav({ items, userLabel }: AppNavProps) {
               </li>
             ))}
           </ul>
-          {userLabel ? <span className="app-nav__user">{userLabel}</span> : null}
         </nav>
+
+        {/*
+         * The account avatar sits in the top bar, outside the collapsible
+         * `<nav>`, so it stays reachable at the mobile breakpoint where the
+         * primary links collapse behind the hamburger toggle (spec §7).
+         */}
+        {user ? <AccountMenu identity={user} /> : null}
       </div>
     </header>
   );

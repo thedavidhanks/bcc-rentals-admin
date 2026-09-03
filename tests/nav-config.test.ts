@@ -18,17 +18,17 @@ describe("navItemsForRole", () => {
     const labels = navItemsForRole("scheduler").map((i) => i.label);
     expect(labels).toEqual([
       "Calendar",
-      "Products",
       "Add Reservation",
       "Update Prices",
     ]);
+    expect(labels).not.toContain("Products");
     expect(labels).not.toContain("Categories");
     expect(labels).not.toContain("Users");
   });
 
-  it("marks exactly Categories and Users as admin-only", () => {
+  it("marks exactly Products, Categories, and Users as admin-only", () => {
     const adminOnly = NAV_ITEMS.filter((i) => i.adminOnly).map((i) => i.label);
-    expect(adminOnly).toEqual(["Categories", "Users"]);
+    expect(adminOnly).toEqual(["Products", "Categories", "Users"]);
   });
 
   it("routes every entry to a non-empty absolute path", () => {

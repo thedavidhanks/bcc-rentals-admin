@@ -105,20 +105,103 @@ body {
   background: var(--nav-active);
 }
 
-.app-nav__user {
-  color: var(--nav-fg-muted);
-  font-size: 0.85rem;
+/* ---- Account avatar + dropdown menu ---- */
+.app-nav__account {
+  position: relative;
+  margin-left: 0.5rem;
+}
+
+.app-nav__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: none;
+  background: var(--nav-active);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.app-nav__avatar:hover {
+  background: var(--nav-hover);
+  color: var(--nav-fg);
+}
+
+.app-nav__avatar:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.app-nav__account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 20;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.35rem;
+  background: #fff;
+  color: #1f2933;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+}
+
+.app-nav__account-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-nav__account-menu-item:hover,
+.app-nav__account-menu-item:focus-visible {
+  background: var(--nav-hover);
+  color: var(--nav-fg);
+  outline: none;
+}
+
+.app-nav__account-menu-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ---- Responsive: collapse to hamburger below the breakpoint ---- */
 @media (max-width: 48rem) {
   .app-nav__toggle {
     display: flex;
+    order: 1;
+  }
+
+  /*
+   * The account avatar stays in the top bar (order 2, alongside the brand and
+   * toggle) rather than inside the collapsible menu (order 3, pushed to its
+   * own full-width row below) — it must remain reachable without opening the
+   * hamburger menu.
+   */
+  .app-nav__account {
+    order: 2;
+    margin-left: 0;
   }
 
   .app-nav__menu {
     display: none;
+    order: 3;
     flex-basis: 100%;
     flex-direction: column;
     align-items: stretch;
