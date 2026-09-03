@@ -305,3 +305,48 @@ plan focused on phases + status; append new entries here as work lands.
   `@testing-library`/jsdom, UI logic covered via loader + `useActionState` result shape), `npm run
   build` exit 0 (new `/reservations/[groupId]` route present). **Unblocks P7.1** (live-DB cross-system
   double-booking check).
+- 2026-09-02 — **P6.3 + P6.4 + P6.5 DONE — the last three admin CRUD screens shipped as one
+  parallel wave.** Merged `integration/P6.3-4-5-admin-crud-wave` into
+  `feature/P6.3-4-5-admin-crud-wave` (`4f34304`); **not yet on `master`** (still `4bce6d9`).
+  Sources: `code-writer/p6.3-update-prices` (`51ac535`), `code-writer/p6.4-products` (`4d0f4ba`),
+  `code-writer/p6.5-categories` (`f298ae9`). Run by `work-distributor` → three `code-writer`
+  agents in parallel `isolation: "worktree"` trees, each gated by its own `test-engineer`.
+  **Delivered:** `app/prices/*` — CRUD `item_prices` with §6 validation (`requireScheduler`),
+  effective base rate + overrides per item; `app/products/*` incl. `new/` and `[id]/` — add/edit
+  items with a base price, deactivate-not-delete, `updated_at=now()`, unique URL-safe slug
+  (`requireAdmin`); `app/categories/*` — category CRUD + product assignment via `item_categories`
+  (`requireAdmin`). Every mutating action calls its guard as the **literal first statement**
+  (before any parsing or read-only pre-checks) and writes `admin_audit_log` inside the same
+  transaction, on the **same client object** as the mutation — asserted by referential identity
+  in tests, not `expect.anything()`, so "one transaction" is actually proven.
+  **Key design decisions:** (1) The P6.3/P6.4 `item_prices` seam was scoped up front — P6.3 owns
+  the repo file and all price UI; P6.4 only *calls* the existing `createPrice` export for a new
+  item's base row (`days_of_week`/`start_minute`/`end_minute` all `null`, `priority: 0`) on the
+  item-insert txn client. Result: `lib/repositories/item-prices.ts` ended **byte-identical to
+  base** on all three branches and the merge had **zero conflicts**. (2) The base-row warning
+  (edit/delete would leave an item with no all-days/all-hours row) is a warn-then-confirm two-step
+  that performs **zero DB writes** on the warning path — tests assert `withTransaction` is never
+  entered, not merely that the mutation didn't fire, so it can't regress into a silent write
+  behind a returned warning. It warns, never blocks, per §6/§7. (3) Money is parsed by splitting
+  whole/fraction parts as integers — no `parseFloat`/`Math.round`, so no float drift; `1.005` is
+  rejected rather than silently rounded. (4) Hour windows use plain numeric 0–1440 minute inputs
+  rather than `<input type="time">`, so the `1440` boundary is representable exactly.
+  **Verification:** combined tree `typecheck` clean, `lint` clean, `npm test` **418/418 (25
+  files)** — 225 baseline + 69 (P6.3) + 63 (P6.4) + 61 (P6.5) — `next build` exit 0, all 13 routes
+  compile with the new ones correctly `ƒ` server-rendered. No schema change, no dependency change,
+  no `TODO(P9)` markers added. Diff is 28 files: 25 added, 3 modified (the placeholder `page.tsx`).
+  **Gotchas hit:** (a) `next build` in the integration worktree failed at `/categories`, which
+  looked exactly like the cross-task route collision the combined run exists to catch — it wasn't.
+  Worktrees have no `.env.local`, and `/categories` is just the first route whose module graph
+  reaches the Firebase client config; injecting dummy env on the command line (never touching
+  `.env.local`) took the build to exit 0. Useful accident: the dummy `DATABASE_URL` pointed at
+  `127.0.0.1:1`, so any page prerendering with a live DB call would have failed loudly — none did,
+  confirming all three pages correctly defer DB work. (b) `.gitignore`'s `node_modules/` has a
+  **trailing slash**, matching directories only, so the `node_modules` symlink each worktree needs
+  showed as untracked and was one `git add -A` from committing an absolute-path symlink; a bare
+  `node_modules` line went into `.git/info/exclude` as a local stopgap — **fold it into
+  `.gitignore`**. (c) `git merge` is human-gated: the distributor was denied and correctly stopped
+  rather than reaching for cherry-pick or rebase; a human ran the three merges.
+  **Unblocks P6.7** (full-flow tests) — note each screen already ships per-action unit tests, so
+  P6.7's real value is the cross-screen journeys those miss (create product → price it → book it →
+  cancel) plus role-denial across every mutating action.

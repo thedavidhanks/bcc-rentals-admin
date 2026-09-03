@@ -29,7 +29,19 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-08-05)
+## Current state (as of 2026-09-02)
+
+**P6 is feature-complete.** The 2026-09-02 wave landed the last three admin CRUD screens —
+**P6.3 Update Prices, P6.4 Products, P6.5 Categories** — built by three parallel `code-writer`
+agents in isolated worktrees, integrated on `integration/P6.3-4-5-admin-crud-wave`, and merged
+to `feature/P6.3-4-5-admin-crud-wave` (`4f34304`). Combined tree: **418 tests / 25 files**,
+typecheck + lint clean, `next build` exit 0. No schema change, no new dependency, no
+`TODO(P9)` markers added. **`master` is still at `4bce6d9` — the wave has not been merged to
+trunk yet.** This unblocks **P6.7** (full-flow tests).
+
+The dated snapshot below (2026-08-05) still describes the auth/DB/bootstrap situation accurately.
+
+### Earlier snapshot (as of 2026-08-05)
 
 **Q3 answered + first admin bootstrapped against PROD; P4.4 DONE (2026-08-05).** The human
 signed in once, created the first admin, and completed the `@bachmancc.org` re-bootstrap.
@@ -230,11 +242,11 @@ These gate specific phases. Surface them to the human; do not guess.
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------- | ------ |
 | P6.1 | Add Reservation: multi-product line items + recurrence controls; on submit run race-safe check across all (item × occurrence), no partial commit.                             | code-writer   | P2.2, P2.4, P5.2 | DONE (`1ab94e4`, merged to `master` `e56b0fa`) |
 | P6.2 | Edit Reservation: edit line items/dates/contact/notes; delete-instance vs delete-series; cancel = `status='cancelled'`.                                                       | code-writer   | P6.1             | **DONE (2026-08-22)** — page + actions merged to `master` (`e045dea`). Contact/notes edit (no engine); line/date/time edit via cancel-then-rebook through `scheduler.createBooking` (race-safe, rolls back on conflict, mints new `group_id`, preserves `series_id`); delete-instance / delete-series (future-only); cancel≠DELETE; audit on every mutation; calendar bars link to `/reservations/[groupId]`. 225 tests green (+23 P6.2). **Unblocks P7.1.** |
-| P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides.                               | code-writer   | P3.1             | TODO   |
-| P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer   | P3.1, P4.3       | TODO   |
-| P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`.                                                                                                 | code-writer   | P3.1, P4.3       | TODO   |
+| P6.3 | Update Prices: CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row; show effective/base rate + overrides.                               | code-writer   | P3.1             | **DONE (2026-09-02)** — `app/prices/*` (`51ac535`) merged via `integration/P6.3-4-5-admin-crud-wave` into `feature/P6.3-4-5-admin-crud-wave` (`4f34304`); **master merge pending**. `requireScheduler` first statement in all 3 actions; money parsed as exact integer cents (whole/fraction parts, no float drift); both-null-or-both-set + `end>start` + 0–1440 hour window; `days_of_week` bounds/duplicate checks. Base-row warn/confirm is a two-step that performs **zero DB writes** on the warning path (asserted `withTransaction` is never entered). Audit write shares the *same* txn client object as the mutation (asserted by identity, not `expect.anything()`). +69 tests. |
+| P6.4 | Products (admin): Add (all `items` fields + base price → first price row), Edit (deactivate not delete, `updated_at=now()`, unique URL-safe slug, respect check constraints). | code-writer   | P3.1, P4.3       | **DONE (2026-09-02)** — `app/products/*` incl. `new/` + `[id]/` (`4d0f4ba`), same integration merge (`4f34304`); **master merge pending**. `requireAdmin` first statement in all 3 actions; deactivate-not-delete; `updated_at=now()`; unique URL-safe slug (pre-check + unique-violation race handling). Base price row written via the **existing** `createPrice` export on the item-insert txn client (`days_of_week`/`start_minute`/`end_minute` all `null`, `priority: 0`) — `lib/repositories/item-prices.ts` **byte-identical to base**, no price-CRUD UI here (that's P6.3). +63 tests. |
+| P6.5 | Categories (admin): CRUD `categories`; assign products via `item_categories`.                                                                                                 | code-writer   | P3.1, P4.3       | **DONE (2026-09-02)** — `app/categories/*` (`f298ae9`), same integration merge (`4f34304`); **master merge pending**. `requireAdmin` first statement in all 6 actions (verified it precedes even the read-only pre-checks); every mutation in `withTransaction` with `writeAuditLog` on the same client. Slug uniqueness allows a row to keep its own slug on edit; delete-confirm re-fetches assignments so the audited set is current; `setItemCategories` DELETE+INSERT stays atomic on the txn client. TOCTOU races (row deleted between pre-check and txn) guarded and tested. +61 tests. |
 | P6.6 | User management (admin): CRUD `app_users` (set role, deactivate); guard against removing last active admin; re-sync custom claim on change. **Extended 2026-08-18 with invite-by-email onboarding** — admin invites by email+name+role (pending row `uid=NULL`, `active=false`); UID binds on first sign-in iff `email_verified=true` + email matches. **Needs 1 schema change (make `app_users.uid` nullable) + a login-flow change.** UID stays canonical (spec §3); email is a one-time binding key only. Work order: [docs/prompts/P6.6-user-management.md](./prompts/P6.6-user-management.md). | code-writer   | P3.1, P4.3       | **DONE (2026-08-19)** — admin CRUD (invite/revoke/set-role/activate) + invite-by-email onboarding shipped and human-approved. Schema migration (nullable `uid` + partial unique indexes on non-null `uid` and pending-invite email) applied to **dev + prod** and verified live. `email_verified` threaded through `SessionIdentity`; UID binds on first verified sign-in (race-safe via `WHERE uid IS NULL`). Last-active-admin guard is transactional (re-check inside the mutation txn). Every mutation writes `admin_audit_log`. `"use server"` split: result-state moved to `app/users/state.ts` (a "use server" file may only export async fns). Verified: typecheck + lint clean, users-actions tests 26/26. **KNOWN LIMITATION:** "Send invite" creates a pending row only — it does **not** email anyone (no mail integration exists); the invitee must be told the URL out-of-band → tracked as P6.9. |
-| P6.7 | Full flow tests: booking (single/multi/recurring), price edits, product lifecycle, role guards (server-side denial).                                                          | test-engineer | P6.1–P6.6        | TODO   |
+| P6.7 | Full flow tests: booking (single/multi/recurring), price edits, product lifecycle, role guards (server-side denial).                                                          | test-engineer | P6.1–P6.6        | **TODO — now UNBLOCKED** (P6.1–P6.6 all DONE as of 2026-09-02). Note each screen already ships per-action unit tests (418 total); P6.7's value is the **cross-screen flows** those miss — create product → price it → book it → cancel, and role-denial across every mutating action. |
 | P6.8 | **Invite-exception to the email-domain guard (MEDIUM).** `emailDomainAllowed` in [lib/auth/guards.ts](../lib/auth/guards.ts) currently blocks any non-`ALLOWED_EMAIL_DOMAIN` email at bind time, so an invited outsider creates a pending row but is then **denied on first sign-in** — inviting outside domains doesn't work end-to-end. Change the bind path to allow binding when **either** the domain matches **or** an explicit pending invite exists for that exact (lower-cased) email. Keeps the domain wall up for everyone else (defense-in-depth); only opens it for people an admin explicitly invited. Do **not** blank `ALLOWED_EMAIL_DOMAIN` (drops the wall for the whole app). Useful for testing with other users. Audit the bind as today. | code-writer | P6.6 | TODO (medium priority) |
 | P6.9 | **Real invitation email (LOW / optional).** Make "Send invite" actually notify the invitee (currently it only writes a pending `app_users` row — see P6.6 known limitation). Scope: pick a mail provider (e.g. Resend/SendGrid), add its key to Secret Manager + Zod env, send from `inviteUserAction` **after** the DB commit (best-effort — a send failure must not roll back the committed invite), include the sign-in URL. **Optional** — launch has ≤10 users, so onboarding can be done manually (tell the invitee the URL out-of-band). | code-writer | P6.6 | TODO (low priority, optional) |
 
@@ -323,41 +335,60 @@ center's day-to-day productivity tooling can be handled in one signup.
 
 ## ▶ Next session — start here
 
-Context: P0–P5, P9.1/P9.2, and the reservation + user-management screens (P6.1 Add
-Reservation, P6.2 Edit Reservation, P6.6 User management) are all DONE and merged (tip
-`a8bcc2b`). Engine, recurrence, repositories, real Firebase auth, app shell, weekly
-calendar, the `@bcc/scheduler` shared package, and the reservation/user CRUD flows exist and
-are green. Pick up with the **rest of the P6 UI wave** — the remaining admin CRUD screens —
-plus the now-unblocked consolidation and live-DB check.
+Context: **the entire P6 admin CRUD surface is now built.** P0–P5, P9.1/P9.2, and every P6
+screen (P6.1 Add Reservation, P6.2 Edit Reservation, **P6.3 Prices, P6.4 Products, P6.5
+Categories** — the 2026-09-02 wave — and P6.6 Users) are DONE. Engine, recurrence,
+repositories, real Firebase auth, app shell, weekly calendar, the `@bcc/scheduler` shared
+package, and all admin CRUD flows exist and are green: **418 tests / 25 files**, typecheck +
+lint + `next build` clean.
 
-**First: housekeeping**
+**⚠️ First: `master` is behind.** The P6.3/6.4/6.5 wave was merged to
+`feature/P6.3-4-5-admin-crud-wave` (`4f34304`), **not** to `master` (still at `4bce6d9`).
+Merge it to `master` before starting new work, or the next branch forks off a stale trunk.
+
+**Then: housekeeping**
 
 - `npm install` if `node_modules` is absent.
-- **Prune stale wave-3 branches** (all content is on `master` via `c648610`):
+- **Prune stale branches** — wave 3 (all content on `master` via `c648610`):
   `code-writer/p4-auth`, `code-writer/p5.1-shell`, `code-writer/p5.2-calendar`,
-  `code-writer/p9.2-shared-pkg`, `integration/wave3`, and their `.claude/worktrees/agent-*`
-  worktrees (`git worktree remove` each, then `git branch -D`).
+  `code-writer/p9.2-shared-pkg`, `integration/wave3`; and this wave, once merged to `master`:
+  `code-writer/p6.3-update-prices`, `code-writer/p6.4-products`, `code-writer/p6.5-categories`,
+  `integration/P6.3-4-5-admin-crud-wave`. Plus their `.claude/worktrees/agent-*` worktrees and
+  the `worktree-agent-*` branches (`git worktree remove` each, then `git branch -D`).
+- **Fix `.gitignore`**: it has `node_modules/` with a **trailing slash**, which matches
+  directories only — so the `node_modules` symlink each agent worktree needs shows as
+  *untracked* and is one `git add -A` from committing an absolute-path symlink. A bare
+  `node_modules` line is in `.git/info/exclude` as a local stopgap; fold it into `.gitignore`.
 
-**Pick any of these — all unblocked, none block each other (the designer may take more than one):**
+**Pick any of these — all unblocked, none block each other:**
 | Task | What | Owner | Notes |
 |---|---|---|---|
-| P6.3 | Update Prices — CRUD `item_prices` with §6 validation; warn if edit leaves no all-days/all-hours base row. | code-writer | Deps P3.1 DONE. |
-| P6.4 | Products (admin) — Add/Edit (deactivate not delete, `updated_at=now()`, unique slug). | code-writer | Deps P3.1, P4.3 DONE. |
-| P6.5 | Categories (admin) — CRUD `categories` + assign via `item_categories`. | code-writer | Deps P3.1, P4.3 DONE. |
+| P6.7 | **(recommended)** Full-flow tests — cross-screen journeys the per-action unit tests can't reach: create product → price it → book it → cancel; recurring + multi-item booking; server-side role denial on every mutating action. | test-engineer | **Newly unblocked** — P6.1–P6.6 all DONE. |
+| P7.1 | **(main-owned, not a code-writer delegation — touches the shared prod DB)** Create a block/reservation in admin → confirm the storefront reflects it within ~30s and won't double-book that window. | main | Deps P6.1 DONE. |
+| P8.1→P8.2 | Deploy runbook, then deploy to `bcc-admin-prod`. | main | Unblocked since P10.4. Human-gated. |
 | P6.8 | **(medium)** Invite-exception to the email-domain guard: let an invited outside-domain user bind on first sign-in (domain match **or** explicit pending invite), keeping the wall up for everyone else. Useful for testing with other users. | code-writer | Deps P6.6 DONE. |
 | P9.3→P9.4 | Refactor storefront **and** admin to import from `@bcc/scheduler`; remove duplicated copies; reconcile `TODO(P9)` markers; run both suites. | code-writer | Deps P9.2 DONE. Cross-repo (touches the storefront) — heavier. |
-| P7.1 | **(main-owned, not a code-writer delegation — touches the shared prod DB)** Create a block/reservation in admin → confirm the storefront reflects it within ~30s and won't double-book that window. | main | Deps P6.1 DONE. |
 
-Wire `writeAuditLog` into **every** mutating action in this wave (P3.2 writer exists).
-P6.7 (full-flow tests) stays blocked until P6.3/P6.4/P6.5 land — don't start it yet.
+Wire `writeAuditLog` into **every** mutating action (P3.2 writer exists).
 P6.9 (real invitation email) is LOW/optional and not required for launch.
 
 **Isolation reminder (learned the hard way in wave 2):** launch parallel `code-writer` agents
 with `isolation: "worktree"`. Wave 2 ran them in one shared tree and the branch labels
 scrambled (recoverable, but avoidable). One shared tree = one branch pointer they fight over.
+Worked cleanly in the 2026-09-02 wave: three agents, disjoint file sets, **zero merge conflicts**.
 
-**Model note:** `code-writer`/`test-engineer` are pinned to `claude-sonnet-4-5` (NOT enabled
-here) — pass `model: opus` when launching or they fail immediately.
+**Worktree setup (2026-09-02):** symlink `node_modules` from the primary tree instead of a slow
+`npm install` — `vitest`/`tsc`/`next lint` all run fine through it. Two gotchas: the symlink is
+**not** covered by `.gitignore`'s `node_modules/` (see housekeeping above), and worktrees have
+**no `.env.local`**, so `next build` there fails fast on missing `NEXT_PUBLIC_*` at whichever
+route first reaches the Firebase client config — an env artifact, not a code defect. Inject
+dummy env on the command line for a real build signal; never copy `.env.local` into a worktree.
+
+**Model note (corrected 2026-09-02):** use **full versioned model IDs** — `claude-sonnet-5` and
+`claude-opus-5` work; bare `claude-sonnet`/`claude-opus` and the Agent-tool `sonnet` enum all
+fail with `model_not_found`. All six agents in `~/.claude/agents/` are now correctly pinned, so
+launch them with **no** `model:` override. Agent definitions are cached at session start, so
+editing a pin needs a session restart.
 
 **Resolved since wave 3:** real Firebase auth (Q2 — client + Admin SDK wired), prod-admin
 bootstrap (**Q3 + P4.4 DONE 2026-08-05** — `@bachmancc.org` admin live in prod, `ALLOWED_EMAIL_DOMAIN`

@@ -147,10 +147,17 @@ npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); r
   (branch → test-engineer → merge), `test-engineer`, `code-improvement-advisor`,
   `graphic-designer`. Reserve `main` for decisions, wiring, and anything touching the
   shared production DB or deployment.
-- **Agent model gotcha:** `code-writer` and `test-engineer` are pinned to
-  `claude-sonnet-4-5`, which is NOT enabled on this Vertex deployment — launching them
-  as-is fails immediately. Pass `model: opus` (or another available model) in the Agent
-  call.
+- **Agent model:** use **full versioned model IDs** in agent frontmatter — bare aliases 404 on
+  this Vertex deployment. Verified 2026-09-02: `claude-sonnet-5` and `claude-opus-5` **work**;
+  bare `claude-sonnet`, bare `claude-opus`, and the Agent-tool enum `sonnet` (it resolves to
+  `claude-sonnet-4-5@20250929`) all fail instantly with `model_not_found`. All six agents in
+  `~/.claude/agents/` were corrected on 2026-09-02 — `code-writer`/`test-engineer`/
+  `general-worker`/`graphic-designer` to `claude-sonnet-5`, `work-distributor`/
+  `code-improvement-advisor` to `claude-opus-5` — so they launch cleanly with **no** per-call
+  `model:` override. Two gotchas: **agent definitions are cached at session start**, so editing
+  a pin needs a session restart before it takes effect; and `code-writer` spawns `test-engineer`
+  internally, so a `model:` override on the parent does **not** rescue a broken child pin. When
+  in doubt, smoke-test with a one-line "reply OK" agent before launching a long wave.
 - **`git merge` needs human approval** here (the permission guard denies it). Agents
   build/verify on a branch and stop; a human runs the merge, then a session marks the
   tasks DONE in the plan.
