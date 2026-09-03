@@ -350,3 +350,24 @@ plan focused on phases + status; append new entries here as work lands.
   **Unblocks P6.7** (full-flow tests) — note each screen already ships per-action unit tests, so
   P6.7's real value is the cross-screen journeys those miss (create product → price it → book it →
   cancel) plus role-denial across every mutating action.
+- 2026-09-03 — **P6.3/P6.4/P6.5 merged to `master` (`9f60fb1`) + full branch purge.** The
+  2026-09-02 CRUD wave, which had stopped at `feature/P6.3-4-5-admin-crud-wave` (`4f34304`)
+  because `git merge` is human-gated, is now on trunk. **Verified on `master`, not on the
+  branch:** `npm test` **418/418 (25 files)** green, and `app/{prices,products,categories}`
+  confirmed tracked via `git ls-tree` (21 files) — the plan rows for P6.3/6.4/6.5 dropped their
+  "master merge pending" caveats only after that check. **Housekeeping:** removed 7 stale
+  worktrees (`/tmp/p6-integration` + six under `.claude/worktrees/agent-*`) and deleted all
+  **24** branches reachable from `master` — the P6.2/P6.6 feature branches, the three
+  `code-writer/p6.{3,4,5}-*` wave branches, both integration branches, and 14 `worktree-agent-*`
+  scratch branches. All went with plain `git branch -d` (no force), so nothing unmerged could be
+  lost. **Four branches deliberately left:** `code-writer/{p4-auth,p5.1-shell,p5.2-calendar,p9.2-shared-pkg}`
+  are *not* ancestors of `master` — wave 3 landed their content through the `c648610` integration
+  merge as different commits, so ancestry says "unmerged" while the content is already on trunk.
+  Rather than trust that, each was diffed against `master`: the **only** paths they add are stale
+  `.claude/agents/*.md` copies (the live ones are in `~/.claude/agents/`), and every other
+  difference is an older variant of a file `master` already carries. So they hold no unique work
+  and are safe to `git branch -D`; left in place because force-deletion wasn't in the requested
+  scope, and two of them still back worktrees that must be `git worktree remove`d first.
+  **Gotcha for future purges:** `git branch --merged` is an *ancestry* test, not a content test —
+  a squash- or integration-merged branch shows as unmerged forever. Diff it against `master`
+  before assuming there's work to rescue.
