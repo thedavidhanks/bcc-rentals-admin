@@ -371,3 +371,20 @@ plan focused on phases + status; append new entries here as work lands.
   **Gotcha for future purges:** `git branch --merged` is an *ancestry* test, not a content test —
   a squash- or integration-merged branch shows as unmerged forever. Diff it against `master`
   before assuming there's work to rescue.
+- 2026-09-03 — **P11 added to the plan: UX polish & first-use fixes (human walkthrough feedback).**
+  First real click-through of the merged P6 surface produced ten items, now tracked as **P11.1–P11.10**.
+  Two are user-facing breakage: **P11.2 (priority)** — no way to log out; `components/sign-out-button.tsx`
+  exists but is rendered nowhere, so the wanted fix is a circular avatar button top-right with an
+  **Update profile** / **Logout** dropdown. **P11.1 (high)** — `NAV_ITEMS` shows **Products** to
+  schedulers while `app/products/page.tsx` calls `requireAdmin()`, so the click throws
+  `ForbiddenError`; the entry needs `adminOnly: true` plus an audit of every nav row against the
+  guard its page actually calls. The rest: **P11.3** self-service profile page (edit own name, see
+  role), **P11.4** non-generic favicon (BCC monogram / Hamilton County flag nod), **P11.5** calendar
+  week↔month toggle, **P11.6** collapse same-`group_id` items into one bar (title + truncated item
+  subtitle), **P11.7** calendar filter flyout (cancelled hidden by default, filter by product),
+  **P11.8** prices must render `$25/hr` not `$25`, **P11.9** lift Date/Start/End out of the line-item
+  box into one shared "When" box, **P11.10** stop wiping the reservation form on a failed submit.
+  **Checked while writing the phase, so no migration is needed:** `app_users.name` already exists
+  (P11.3) and `items.pricing_unit` (`hour|day|event`) already exists (P11.8) — both are display/write
+  work only. `public/` is empty and there is no `app/icon.*`, confirming P11.4. All ten are unblocked
+  and mutually independent — a natural parallel `code-writer` worktree wave.
