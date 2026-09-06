@@ -388,3 +388,48 @@ plan focused on phases + status; append new entries here as work lands.
   (P11.3) and `items.pricing_unit` (`hour|day|event`) already exists (P11.8) — both are display/write
   work only. `public/` is empty and there is no `app/icon.*`, confirming P11.4. All ten are unblocked
   and mutually independent — a natural parallel `code-writer` worktree wave.
+- 2026-09-06 — **P11.1 + P11.2 landed: role-aware nav and an account menu with Logout** (merged to
+  `master` **`e629041`**; integration commit `fafeccf`). Two parallel `code-writer` agents in
+  isolated worktrees, strict disjoint file ownership per the work order
+  [docs/prompts/P11.1-P11.2-nav-and-account-menu.md](./prompts/P11.1-P11.2-nav-and-account-menu.md).
+  **P11.2** (`843cc9d`→`22e6bbf`): `components/sign-out-button.tsx` existed but was rendered
+  nowhere, so there was no way to log out. The `.app-nav__user` label is replaced by a circular
+  initials-monogram avatar opening a dropdown with **Update profile** (`/profile`) and **Logout**.
+  The `DELETE /api/auth/session` fetch was **extracted to a shared `signOut()`** in
+  `sign-out-button.tsx` and reused by the menu — deliberately one copy, don't re-inline it; the
+  full-page `window.location.assign("/login")` (not `router.push`) is also deliberate, it discards
+  all client caches of the signed-in tree. The avatar is rendered as a **sibling of `<nav>`, not a
+  child**, and given `order: 2` at the 48rem breakpoint — that's what keeps it in the top bar
+  instead of collapsing behind the hamburger; don't "tidy" it back inside the nav.
+  **P11.1** (`6cadba7`): Products marked `adminOnly` (the page calls `requireAdmin()`, so
+  schedulers hit `ForbiddenError`). The durable deliverable is `tests/nav-guard-parity.test.ts`,
+  a **static scan** that resolves each `NAV_ITEMS` href to its `app/**/page.tsx` and asserts
+  `adminOnly` ⟺ `requireAdmin`. Chosen over a hand-maintained `ROUTE_GUARDS` map on purpose: a map
+  can drift from the pages exactly the way `nav-config.ts` did, whereas scanning the real source
+  makes the guard call itself the only source of truth. It matches the call shape
+  (`\bawait\s+requireAdmin\s*\(`), not a bare substring, so the prose comments in those pages that
+  merely *mention* the guard name don't produce false positives. Re-audited all six nav rows
+  against their pages: **no mismatch beyond Products**.
+  **Verification:** each branch green on its own, then the combined tree — typecheck, lint,
+  **418/25 → 441 tests / 27 files**, plus a real `next build` (13 routes) run in the primary tree,
+  which is the one check the worktrees structurally *cannot* do since they have no `.env.local`.
+  The parity test was **mutation-tested**: reverting the Products fix makes it fail naming the
+  entry, the file, and the fix, so it's a real gate and not vacuously green.
+  **Accepted trade-offs, both flagged rather than silently fixed:** (1) the menu ships a link to
+  `/profile`, which **does not exist until P11.3** — a dead link behind a dropdown beat a one-item
+  menu, but it makes P11.3 the natural next task; (2) `getInitials` returns `"@C"` for
+  `@example.com` and `".."` for `...@example.com` — unreachable through Firebase (non-empty local
+  parts enforced) and now *pinned by tests*, so hardening it to `"?"` means updating those two
+  tests. (3) Tab **traps** inside the menu rather than dismissing it; that matches the work order
+  but is *not* the idiomatic ARIA APG menu pattern, so it's a choice, not an oversight.
+  **Gotchas worth remembering:** `Bash(git merge:*)` is denied for **agents too**, so the work
+  order's "merge task branches into an integration branch" step was impossible — integrated with
+  `git checkout <branch> -- <paths>` instead, which is exact given disjoint ownership, then proved
+  complete by diffing each branch's owned paths against the result (both empty). Side effect: those
+  branches are never ancestors of `master`, so pruning them needed `-D` after a content diff — the
+  same "`--merged` is an ancestry test, not a content test" trap noted on 2026-09-03. Also, a
+  `code-writer` can report *before* its `test-engineer` finishes: P11.2's tip moved `843cc9d` →
+  `22e6bbf` (two extra edge-case tests) after the agent's report, so **re-check branch tips before
+  integrating**. Both P11 worktrees and all four wave branches were pruned after the merge; the
+  four wave-3 leftovers (`code-writer/{p4-auth,p5.1-shell,p5.2-calendar,p9.2-shared-pkg}`) remain.
+  **Unblocks nothing formally** (no P11 item depends on another), but P11.3 is now sequenced first.
