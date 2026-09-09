@@ -20,6 +20,7 @@ import {
   type RecurrenceFreq,
   type RecurrenceRule,
 } from "@/lib/scheduler/recurrence";
+import { readSubmittedValues, type SubmittedValues } from "./form-values";
 import type { ConflictLine, CreateReservationState } from "./types";
 
 // Add Reservation server action (execution-plan task P6.1, spec §7/§8/§9).
@@ -35,6 +36,16 @@ import type { ConflictLine, CreateReservationState } from "./types";
 // browser sends HTML <input type="time"> "HH:MM" which we convert to minutes.
 // Each (Eastern civil date + minutes) becomes a real timestamptz instant via
 // easternInstant (offset-correct across DST). No floats, no stored offsets.
+//
+// P11.9: all line items in a booking share ONE date/time window (spec §7 "the
+// shared or per-item date/time window" — this app chose shared). `date`,
+// `startMinute`, `endMinute` are form-level fields now, not per-line.
+//
+// P11.10: every error return carries `values` — the raw submitted strings
+// (see ./form-values) — so a rejected save (validation failure or the routine
+// capacity conflict on a busy calendar) doesn't wipe the form. `values` is
+// display-only: it is never fed back into the write path, and the echoed
+// itemSlugs are re-validated against the active catalog on every submit.
 
 const MINUTES_PER_DAY = 24 * 60;
 
@@ -57,22 +68,10 @@ const timeString = z
   .regex(TIME_RE, "must be a time (HH:MM)")
   .transform(timeToMinutes);
 
-const lineSchema = z
-  .object({
-    itemSlug: z.string().min(1, "choose an item"),
-    quantity: z.coerce.number().int("whole number").positive("must be ≥ 1"),
-    date: z.string().regex(DATE_RE, "must be a date"),
-    startMinute: timeString,
-    endMinute: timeString,
-  })
-  .refine((l) => l.endMinute > l.startMinute, {
-    message: "end time must be after start time",
-    path: ["endMinute"],
-  })
-  .refine((l) => l.startMinute >= 0 && l.endMinute <= MINUTES_PER_DAY, {
-    message: "time must be within one day",
-    path: ["endMinute"],
-  });
+const lineSchema = z.object({
+  itemSlug: z.string().min(1, "choose an item"),
+  quantity: z.coerce.number().int("whole number").positive("must be ≥ 1"),
+});
 
 const freqSchema: z.ZodType<RecurrenceFreq> = z.enum([
   "daily",
@@ -99,77 +98,72 @@ const recurrenceSchema = z
     path: ["count"],
   });
 
-const formSchema = z.object({
-  contactName: z.string().trim().max(200).optional(),
-  contactEmail: z
-    .string()
-    .trim()
-    .email("invalid email")
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
-  contactPhone: z.string().trim().max(50).optional(),
-  notes: z.string().trim().max(2000).optional(),
-  title: z.string().trim().max(200).optional(),
-  lines: z.array(lineSchema).min(1, "add at least one line item"),
-  recurring: z.boolean().default(false),
-  recurrence: recurrenceSchema.optional(),
-});
+// The shared "When" box (P11.9): one date/time window applies to every line.
+const formSchema = z
+  .object({
+    date: z.string().regex(DATE_RE, "must be a date"),
+    startMinute: timeString,
+    endMinute: timeString,
+    contactName: z.string().trim().max(200).optional(),
+    contactEmail: z
+      .string()
+      .trim()
+      .email("invalid email")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    contactPhone: z.string().trim().max(50).optional(),
+    notes: z.string().trim().max(2000).optional(),
+    title: z.string().trim().max(200).optional(),
+    lines: z.array(lineSchema).min(1, "add at least one line item"),
+    recurring: z.boolean().default(false),
+    recurrence: recurrenceSchema.optional(),
+  })
+  .refine((f) => f.endMinute > f.startMinute, {
+    message: "end time must be after start time",
+    path: ["endMinute"],
+  })
+  .refine((f) => f.startMinute >= 0 && f.endMinute <= MINUTES_PER_DAY, {
+    message: "time must be within one day",
+    path: ["endMinute"],
+  });
 
 type ParsedForm = z.infer<typeof formSchema>;
 
 // ---------------------------------------------------------------------------
-// FormData → structured input
+// SubmittedValues (raw strings, see ./form-values) → Zod input shape
 // ---------------------------------------------------------------------------
 
 /**
- * Read the flat FormData the client form submits into the nested shape the Zod
- * schema validates. Line-item fields are named `line-<i>-<field>` (contiguous
- * indices are not required — we collect by scanning the present keys).
+ * Adapt the raw echoed strings into the shape formSchema validates. Mirrors
+ * the old readForm()'s semantics exactly: every optional string field maps
+ * "" to undefined EXCEPT contactEmail, which is passed through as-is so
+ * zod's `.or(z.literal("").transform(() => undefined))` branch handles the
+ * empty-string case (kept intentionally different, see actions.ts history).
  */
-function readForm(formData: FormData): unknown {
-  const str = (k: string): string | undefined => {
-    const v = formData.get(k);
-    return typeof v === "string" && v.length > 0 ? v : undefined;
-  };
-
-  // Collect line indices present in the payload.
-  const lineIndices = new Set<number>();
-  for (const key of formData.keys()) {
-    const m = /^line-(\d+)-/.exec(key);
-    if (m) lineIndices.add(Number(m[1]));
-  }
-  const lines = [...lineIndices]
-    .sort((a, b) => a - b)
-    .map((i) => ({
-      itemSlug: str(`line-${i}-itemSlug`) ?? "",
-      quantity: str(`line-${i}-quantity`) ?? "1",
-      date: str(`line-${i}-date`) ?? "",
-      startMinute: str(`line-${i}-startMinute`) ?? "",
-      endMinute: str(`line-${i}-endMinute`) ?? "",
-    }));
-
-  const recurring = formData.get("recurring") === "on" || formData.get("recurring") === "true";
-
-  const recurrence = recurring
-    ? {
-        freq: str("recurrence-freq") ?? "weekly",
-        interval: str("recurrence-interval") ?? "1",
-        byWeekday: formData.getAll("recurrence-byWeekday").map((v) => String(v)),
-        endMode: str("recurrence-endMode") ?? "count",
-        untilDate: str("recurrence-untilDate"),
-        count: str("recurrence-count"),
-      }
-    : undefined;
+function toParseInput(values: SubmittedValues): unknown {
+  const strOrUndef = (s: string): string | undefined => (s.length > 0 ? s : undefined);
 
   return {
-    contactName: str("contactName"),
-    contactEmail: formData.get("contactEmail") ?? undefined,
-    contactPhone: str("contactPhone"),
-    notes: str("notes"),
-    title: str("title"),
-    lines,
-    recurring,
-    recurrence,
+    date: values.date,
+    startMinute: values.startMinute,
+    endMinute: values.endMinute,
+    contactName: strOrUndef(values.contactName),
+    contactEmail: values.contactEmail,
+    contactPhone: strOrUndef(values.contactPhone),
+    notes: strOrUndef(values.notes),
+    title: strOrUndef(values.title),
+    lines: values.lines.map((l) => ({ itemSlug: l.itemSlug, quantity: l.quantity })),
+    recurring: values.recurring,
+    recurrence: values.recurring
+      ? {
+          freq: values.recurrence.freq,
+          interval: values.recurrence.interval,
+          byWeekday: values.recurrence.byWeekday,
+          endMode: values.recurrence.endMode,
+          untilDate: strOrUndef(values.recurrence.untilDate),
+          count: strOrUndef(values.recurrence.count),
+        }
+      : undefined,
   };
 }
 
@@ -178,26 +172,20 @@ function readForm(formData: FormData): unknown {
 // ---------------------------------------------------------------------------
 
 /** Build the BookingGroupInput for a single occurrence date (Eastern YYYY-MM-DD). */
-function buildGroup(
-  parsed: ParsedForm,
-  occurrenceDate: string,
-  perLineDate: boolean,
-): BookingGroupInput {
-  const lines = parsed.lines.map((line) => {
-    // For a one-off, honor each line's own date; for a recurring series every
-    // line shares the occurrence's date (the per-line dates seed the series).
-    const date = perLineDate ? line.date : occurrenceDate;
-    return {
-      itemSlug: line.itemSlug,
-      quantity: line.quantity,
-      startISO: easternInstant(date, line.startMinute).toISOString(),
-      endISO: easternInstant(date, line.endMinute).toISOString(),
-    };
-  });
+function buildGroup(parsed: ParsedForm, occurrenceDate: string): BookingGroupInput {
+  // P11.9: every line shares the one submitted window for this occurrence.
+  const startISO = easternInstant(occurrenceDate, parsed.startMinute).toISOString();
+  const endISO = easternInstant(occurrenceDate, parsed.endMinute).toISOString();
 
-  // Anchor instant of the occurrence = earliest line start on that date.
-  const earliestStart = Math.min(...parsed.lines.map((l) => l.startMinute));
-  const occurrenceAt = easternInstant(occurrenceDate, earliestStart).toISOString();
+  const lines = parsed.lines.map((line) => ({
+    itemSlug: line.itemSlug,
+    quantity: line.quantity,
+    startISO,
+    endISO,
+  }));
+
+  // Anchor instant of the occurrence = the shared start time.
+  const occurrenceAt = startISO;
 
   return {
     title: parsed.title,
@@ -222,8 +210,10 @@ export async function createReservationAction(
   // a. Server-side authorization FIRST — never trust the UI (spec §3, CLAUDE.md).
   const user = await requireScheduler();
 
-  // b. Validate at the boundary.
-  const parsedResult = formSchema.safeParse(readForm(formData));
+  // b. Capture the raw submission (P11.10) before/independently of validation,
+  // then validate at the boundary.
+  const values = readSubmittedValues(formData);
+  const parsedResult = formSchema.safeParse(toParseInput(values));
   if (!parsedResult.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsedResult.error.issues) {
@@ -233,6 +223,7 @@ export async function createReservationAction(
       status: "error",
       message: "Please fix the highlighted fields.",
       fieldErrors,
+      values,
     };
   }
   const parsed = parsedResult.data;
@@ -247,25 +238,24 @@ export async function createReservationAction(
     return {
       status: "error",
       message: `Unknown or inactive item(s): ${unknown.join(", ")}`,
+      values,
     };
   }
 
   // e. Recurrence: expand the rule into occurrence dates (Eastern), or a single
-  // one-off group. For a one-off each line keeps its own date/time window.
+  // one-off group. The shared date is the occurrence key for a one-off and the
+  // series anchor (starts_on) for a recurring booking.
   let occurrenceDates: string[];
   let truncated = false;
-  let perLineDate = false;
   let seriesInsert: RecurrenceRule | null = null;
 
   if (parsed.recurring && parsed.recurrence) {
     const r = parsed.recurrence;
-    // The series anchors on the first line's date (the earliest chosen date).
-    const startsOn = [...parsed.lines.map((l) => l.date)].sort()[0];
     const rule: RecurrenceRule = {
       freq: r.freq,
       interval: r.interval,
       byWeekday: r.byWeekday && r.byWeekday.length > 0 ? r.byWeekday : null,
-      startsOn,
+      startsOn: parsed.date,
       untilDate: r.endMode === "until" ? r.untilDate ?? null : null,
       count: r.endMode === "count" ? r.count ?? null : null,
     };
@@ -274,15 +264,15 @@ export async function createReservationAction(
       return {
         status: "error",
         message: "The recurrence produced no occurrences — check the dates.",
+        values,
       };
     }
     occurrenceDates = expansion.occurrences;
     truncated = expansion.truncated;
     seriesInsert = rule;
   } else {
-    // One-off: one group; per-line dates apply. Use the earliest date as the key.
-    occurrenceDates = [[...parsed.lines.map((l) => l.date)].sort()[0]];
-    perLineDate = true;
+    // One-off: a single group on the shared date.
+    occurrenceDates = [parsed.date];
   }
 
   // f + g. Race-safe write + series + audit, all in ONE transaction.
@@ -303,9 +293,7 @@ export async function createReservationAction(
           )
         : null;
 
-      const groups = occurrenceDates.map((date) =>
-        buildGroup(parsed, date, perLineDate),
-      );
+      const groups = occurrenceDates.map((date) => buildGroup(parsed, date));
 
       const booking = await scheduler.createBooking(
         { createdBy: user.uid, seriesId: series?.id, groups },
@@ -364,17 +352,19 @@ export async function createReservationAction(
           "Some items are unavailable for the requested window(s). Nothing was booked.",
         conflicts,
         truncated,
+        values,
       };
     }
 
     if (err instanceof SchedulerError) {
-      return { status: "error", message: err.message, truncated };
+      return { status: "error", message: err.message, truncated, values };
     }
 
     return {
       status: "error",
       message: "Could not create the reservation. Please try again.",
       truncated,
+      values,
     };
   }
 }
