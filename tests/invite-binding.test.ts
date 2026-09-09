@@ -98,10 +98,14 @@ describe("getSessionUser — invite binding (P6.6)", () => {
     const { getSessionUser } = await import("../lib/auth/guards");
 
     const user = await getSessionUser();
+    // P11.3: getSessionUser's real path (which the bind path feeds into) now
+    // also threads app_users.name through — boundRow()'s default name is
+    // "Invitee".
     expect(user).toEqual({
       uid: "real-uid",
       role: "scheduler",
       email: "invitee@bachmancc.org",
+      name: "Invitee",
     });
     expect(bindInvite).toHaveBeenCalledTimes(1);
     expect(bindInvite).toHaveBeenCalledWith(
@@ -177,10 +181,13 @@ describe("getSessionUser — invite binding (P6.6)", () => {
     });
     const { getSessionUser } = await import("../lib/auth/guards");
     const user = await getSessionUser();
+    // P11.3: name now threads through here too — activeRow()'s default name
+    // is "Existing".
     expect(user).toEqual({
       uid: "existing-uid",
       role: "admin",
       email: "existing@bachmancc.org",
+      name: "Existing",
     });
     expect(getUserByUid).toHaveBeenCalledWith("existing-uid");
     expect(bindInvite).not.toHaveBeenCalled();

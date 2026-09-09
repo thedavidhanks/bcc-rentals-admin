@@ -108,6 +108,27 @@ export async function setUserActive(
   return rows[0] ?? null;
 }
 
+/**
+ * Self-service name update (P11.3, spec §3/§7). Sets ONLY `name` and
+ * `updated_at` — `role`, `active`, `email`, and `uid` are never touched here,
+ * so a self-service caller can never escalate their own privileges or edit
+ * someone else's account through this function. `name: null` clears the name
+ * (the monogram then falls back to email). Returns null when no row matches
+ * `uid` (0 rows updated).
+ */
+export async function updateUserName(
+  uid: string,
+  name: string | null,
+  client?: Queryable,
+): Promise<AppUserRow | null> {
+  const { rows } = await executor(client).query<AppUserRow>(
+    `UPDATE app_users SET name = $2, updated_at = now() WHERE uid = $1
+     RETURNING ${USER_COLUMNS}`,
+    [uid, name],
+  );
+  return rows[0] ?? null;
+}
+
 export async function updateLastLogin(
   uid: string,
   when: Date = new Date(),

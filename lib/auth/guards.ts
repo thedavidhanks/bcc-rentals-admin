@@ -84,7 +84,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const email = row.email ?? identity.email;
   if (!emailDomainAllowed(email)) return null;
 
-  return { uid: row.uid, role: row.role, email };
+  return { uid: row.uid, role: row.role, email, name: row.name };
 }
 
 /**

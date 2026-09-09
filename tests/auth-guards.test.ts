@@ -105,12 +105,44 @@ describe("getSessionUser", () => {
       dbUser: makeRow({ role: "admin" }),
     });
     const { getSessionUser } = await import("../lib/auth/guards");
+    // P11.3: the real path now also threads app_users.name through (so the
+    // account-menu monogram can prefer it) — makeRow()'s default name is
+    // "Person". The dev-bypass path (previous test) has no app_users row and
+    // is intentionally unaffected: it keeps returning the bare
+    // { uid, role, email } shape.
     expect(await getSessionUser()).toEqual({
       uid: "uid-1",
       role: "admin",
       email: "person@bachmancc.org",
+      name: "Person",
     });
     expect(getUserByUid).toHaveBeenCalledWith("uid-1");
+  });
+
+  it("real path: threads a null app_users.name through as name: null (not omitted)", async () => {
+    mockAll({
+      identity: { uid: "uid-1", email: "person@bachmancc.org", email_verified: true },
+      dbUser: makeRow({ role: "scheduler", name: null }),
+    });
+    const { getSessionUser } = await import("../lib/auth/guards");
+    const user = await getSessionUser();
+    expect(user).not.toBeNull();
+    expect(user?.name).toBeNull();
+  });
+
+  it("dev-bypass: name is simply absent (no app_users row lookup happens on this path)", async () => {
+    const { getUserByUid } = mockAll({
+      identity: {
+        uid: "dev-sched",
+        email: "dev-sched@dev.local",
+        email_verified: true,
+        role: "scheduler",
+      },
+    });
+    const { getSessionUser } = await import("../lib/auth/guards");
+    const user = await getSessionUser();
+    expect(user).not.toHaveProperty("name");
+    expect(getUserByUid).not.toHaveBeenCalled();
   });
 
   it("denies an unknown user (no app_users row)", async () => {

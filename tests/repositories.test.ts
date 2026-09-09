@@ -32,6 +32,7 @@ import {
 import {
   countActiveAdmins,
   getUserByUid,
+  updateUserName,
   upsertUser,
 } from "../lib/repositories/app-users";
 
@@ -231,5 +232,35 @@ describe("app_users repository", () => {
   it("countActiveAdmins parses the count", async () => {
     const { client } = makeClient({ rows: [{ count: 2 }] });
     expect(await countActiveAdmins(client)).toBe(2);
+  });
+
+  // P11.3 §3.2 — a self-service caller must never be able to write role/active
+  // through this path. Assert at the SQL level that the UPDATE touches ONLY
+  // `name` and `updated_at`, nothing else, regardless of what a caller passes.
+  describe("updateUserName (self-service profile update, P11.3)", () => {
+    it("emits an UPDATE that sets ONLY name and updated_at, keyed by uid", async () => {
+      const { client, calls } = makeClient({ rows: [{ id: "u1", uid: "abc", name: "New" }] });
+      await updateUserName("abc", "New", client);
+      const sql = norm(calls[0].text);
+      expect(sql).toContain("UPDATE app_users SET name = $2, updated_at = now()");
+      expect(sql).toContain("WHERE uid = $1");
+      // No other column is ever set by this statement.
+      expect(sql).not.toMatch(/\brole\s*=/);
+      expect(sql).not.toMatch(/\bactive\s*=/);
+      expect(sql).not.toMatch(/\bemail\s*=/);
+      expect(sql).not.toMatch(/\buid\s*=\s*\$2/); // uid only appears in WHERE ($1)
+      expect(calls[0].values).toEqual(["abc", "New"]);
+    });
+
+    it("passes null through to clear the name", async () => {
+      const { client, calls } = makeClient({ rows: [{ id: "u1" }] });
+      await updateUserName("abc", null, client);
+      expect(calls[0].values).toEqual(["abc", null]);
+    });
+
+    it("returns null when no row matched (0 rows)", async () => {
+      const { client } = makeClient({ rows: [] });
+      expect(await updateUserName("ghost", "Name", client)).toBeNull();
+    });
   });
 });

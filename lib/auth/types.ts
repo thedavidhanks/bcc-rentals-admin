@@ -12,11 +12,18 @@ export type { UserRole };
  * The authenticated + authorized caller, as returned by `getSessionUser()`.
  * `role` is resolved from the canonical permission store (`app_users.role` in the
  * real path; the dev-bypass stub in local dev). `email` is display/contact only.
+ *
+ * `name` (P11.3) is optional and non-breaking: it is populated from
+ * `app_users.name` on the real path, and is simply absent on the dev-bypass
+ * path (which returns before any `app_users` row lookup and has no row to
+ * read a name from). Consumers (e.g. the account-menu monogram) already treat
+ * a missing/null `name` as "fall back to email".
  */
 export interface SessionUser {
   uid: string;
   role: UserRole;
   email: string | null;
+  name?: string | null;
 }
 
 /**
