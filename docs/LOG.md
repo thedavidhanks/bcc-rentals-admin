@@ -484,3 +484,18 @@ plan focused on phases + status; append new entries here as work lands.
   `/layout` cache tag), so the monogram genuinely refreshes after a rename — not a no-op.
   **Unblocks nothing formally**, but P11.10 should reuse the echo-submitted-value-back-on-failure
   shape from `app/profile/state.ts`; that defect class was fixed at birth here.
+- 2026-09-09 — **P11.3 merged to `master` (`4cb0ec3`) + prune list content-verified.** The
+  `feature/P11.3-profile-page` branch (`298df18` feature, `c7cbdbe` work order, `4cb0ec3` plan/log)
+  is on trunk; `/profile` is live and the P11.2 dead link is closed. Trunk now carries **463 tests /
+  28 files**. `master` is **3 commits ahead of `origin/master`** — unpushed at time of writing.
+  **Prune audit (suggested, not executed — 9 branches, 4 worktrees).** Re-confirmed the
+  2026-09-03 lesson that `git branch --merged` is an **ancestry** test, not a **content** test, so
+  every non-ancestor was checked with `git diff --diff-filter=A --name-only master <branch>` (files
+  present on the branch but absent from master) rather than trusted to the merge graph. Results:
+  the four wave-3 leftovers (`code-writer/{p4-auth,p5.1-shell,p5.2-calendar,p9.2-shared-pkg}`) each
+  add **only** the six stale `.claude/agents/*.md` copies — and per CLAUDE.md those definitions live
+  in `~/.claude/agents/`, so the repo copies are duplicates, not the source of truth.
+  `code-writer/p11.3-profile-impl` adds exactly one unique path, `app/profile/profile-form.tsx`,
+  the discarded twin's client component (master has `profile-manager.tsx` from the implementation
+  that shipped). Four more branches are plain ancestors of master. **No branch carries unique source
+  worth keeping.** Worktrees must be removed before their branches can be deleted.

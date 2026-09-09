@@ -31,12 +31,12 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ## Current state (as of 2026-09-09)
 
-**P11.3 is done but lives on a feature branch, not trunk.** `master` tip is `97082d7`;
-`feature/P11.3-profile-page` (`298df18` + the `c7cbdbe` work-order doc) carries the `/profile`
-self-service page and is **the branch to merge next**. Verified on it: `npm test` **463/463
-(28 files)**, typecheck + lint green. No schema change (`app_users.name` already existed), no new
-dependency, no DDL, no deploy. This closes the `/profile` dead link P11.2 knowingly shipped.
-**7 of 10 P11 items remain**, all unblocked.
+**P11.3 is merged to `master`; tip is `4cb0ec3`** (`298df18` feature + `c7cbdbe` work order +
+`4cb0ec3` plan/log), via `feature/P11.3-profile-page`. The `/profile` self-service page is on
+trunk, which closes the dead link P11.2 knowingly shipped. Verified before merge: `npm test`
+**463/463 (28 files)**, typecheck + lint green. No schema change (`app_users.name` already
+existed), no new dependency, no DDL, no deploy. **`master` is 3 commits ahead of `origin/master`
+— unpushed.** **7 of 10 P11 items remain**, all unblocked.
 
 **The first P11 nav wave is on `master`.** P11.1 (role-aware nav) and P11.2 (account menu with
 Logout) — the two user-visible breakages from the 2026-09-03 walkthrough — were built by two
@@ -359,8 +359,8 @@ gaps**, not engine work: no schema change is required for any of them (`app_user
 exists; `items.pricing_unit` already exists). All are unblocked — P6 is DONE — and none block each
 other, so they can fan out to parallel `code-writer` worktrees. **P11.1 + P11.2 landed 2026-09-06**
 (merged to `master` `e629041`) — logout and the role-aware nav are fixed. **P11.3 landed 2026-09-09**
-on `feature/P11.3-profile-page` (`298df18`, not yet on `master`), which closes the `/profile` dead
-link the account menu shipped. **7 of 10 remain**, all unblocked. Note the calendar trio
+(`298df18`, merged to `master` `4cb0ec3`), which closes the `/profile` dead link the account menu
+shipped. **7 of 10 remain**, all unblocked. Note the calendar trio
 (P11.5/P11.6/P11.7) all touch the same surface and **compose** — run them sequentially or as one
 agent, not as three parallel worktrees; likewise P11.10 builds on P11.9's shared date/time box.
 
@@ -368,7 +368,7 @@ agent, not as three parallel worktrees; likewise P11.10 builds on P11.9's shared
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | ---------------------- |
 | P11.1  | **Nav must show only what the role can reach.** Signing in as a `scheduler` and clicking **Products** throws `ForbiddenError: Admin role required` — [app/products/page.tsx:29](../app/products/page.tsx#L29) calls `requireAdmin()`, but [components/nav/nav-config.ts:22](../components/nav/nav-config.ts#L22) has no `adminOnly: true` on the Products entry. Fix that entry **and** audit every row in `NAV_ITEMS` against the guard its page actually calls (`/prices` = `requireScheduler`, `/categories` + `/users` = `requireAdmin`, …) so the two can't drift again. Server guards stay the real boundary; this is the cosmetic half. Add a test asserting nav entries ⊆ role-reachable routes. Work order: [docs/prompts/P11.1-P11.2-nav-and-account-menu.md](./prompts/P11.1-P11.2-nav-and-account-menu.md). | code-writer      | P5.1    | **DONE (2026-09-06)** (`6cadba7`, integrated `fafeccf`, merged to master `e629041`) — Products marked `adminOnly`; new `tests/nav-guard-parity.test.ts` statically resolves every `NAV_ITEMS` href to its `app/**/page.tsx` and asserts `adminOnly` ⟺ `requireAdmin`, so nav and guards can't drift again. Audit found **no** mismatch beyond Products. |
 | P11.2  | **Account menu with Logout (PRIORITY).** [components/sign-out-button.tsx](../components/sign-out-button.tsx) exists but is **rendered nowhere**, so there is no way to log out of the app. Replace the plain user label in [components/nav/AppNav.tsx](../components/nav/AppNav.tsx) with a circular avatar button in the top-right (GitHub/Facebook style — initials or gravatar-ish monogram from `name`/`email`) that opens a dropdown containing at minimum **Update profile** (→ `/profile`, P11.3) and **Logout** (wire the existing sign-out flow → `POST /api/auth/session` delete → redirect to `/login`). Keyboard-accessible (Esc/outside-click close, focus trap, `aria-expanded`). Note the real sign-out endpoint is **`DELETE /api/auth/session`** (POST mints the cookie). Work order: [docs/prompts/P11.1-P11.2-nav-and-account-menu.md](./prompts/P11.1-P11.2-nav-and-account-menu.md). | code-writer      | P5.1    | **DONE (2026-09-06)** (`22e6bbf`, integrated `fafeccf`, merged to master `e629041`) — circular initials-monogram avatar top-right opens a dropdown with **Update profile** (`/profile`) + **Logout**; the `DELETE /api/auth/session` fetch was extracted to a shared `signOut()` so it lives in one place. Full keyboard/ARIA (Esc, outside-click, arrows, Tab wrap, focus return). Avatar sits **outside** `<nav>` so it stays in the top bar at the 48rem breakpoint. `/profile` 404s until P11.3 — accepted, see log. |
-| P11.3  | **Profile page `/profile`.** Signed-in user can view and update their own **name** (`app_users.name` — column already exists, no migration) and **see their role/group** read-only. Self-service only: the action must write only the caller's own row keyed by session UID (never accept a target uid/id from the form), leave `role`/`active` untouched, set `updated_at = now()`, and write `admin_audit_log`. Both roles may use it. Work order: [docs/prompts/P11.3-profile-page.md](./prompts/P11.3-profile-page.md).                                                                                                                                                                                                | code-writer      | P4.3    | **DONE (2026-09-09)** (`298df18`, merged to `feature/P11.3-profile-page` — **not yet on `master`**) — `/profile` renders name (editable), role/email/last-login (read-only); `updateUserName(uid, name)` sets **only** `name` + `updated_at`, so `role`/`active`/`email`/`uid` are structurally unreachable from the self-service path. Write is keyed off `requireScheduler().uid` only — the form has no target-id field at all — with mutation + `admin_audit_log` (`user.profile.update`) in one `withTransaction`. `SessionUser.name` (optional) now threads into the account-menu monogram, so the P11.2 dead link is closed. 441 → **463 tests / 28 files**. |
+| P11.3  | **Profile page `/profile`.** Signed-in user can view and update their own **name** (`app_users.name` — column already exists, no migration) and **see their role/group** read-only. Self-service only: the action must write only the caller's own row keyed by session UID (never accept a target uid/id from the form), leave `role`/`active` untouched, set `updated_at = now()`, and write `admin_audit_log`. Both roles may use it. Work order: [docs/prompts/P11.3-profile-page.md](./prompts/P11.3-profile-page.md).                                                                                                                                                                                                | code-writer      | P4.3    | **DONE (2026-09-09)** (`298df18`, via `feature/P11.3-profile-page`, merged to master `4cb0ec3`) — `/profile` renders name (editable), role/email/last-login (read-only); `updateUserName(uid, name)` sets **only** `name` + `updated_at`, so `role`/`active`/`email`/`uid` are structurally unreachable from the self-service path. Write is keyed off `requireScheduler().uid` only — the form has no target-id field at all — with mutation + `admin_audit_log` (`user.profile.update`) in one `withTransaction`. `SessionUser.name` (optional) now threads into the account-menu monogram, so the P11.2 dead link is closed. 441 → **463 tests / 28 files**. |
 | P11.4  | **Non-generic favicon.** `public/` is empty and there is no `app/icon.*`, so the site shows the browser default. Design a BCC mark (monogram, or a nod to the Hamilton County flag) and ship it as `app/icon.svg` + `app/apple-icon.png` (App Router auto-wires these into `<head>`); include a 32×32-legible variant. Keep it readable at tab size.                                                                                                                                                                                                                                                                                             | graphic-designer | —       | TODO                   |
 | P11.5  | **Calendar: week/month view toggle.** Add a view selector to `/calendar` (default stays **week**). Month view = day-cell grid for the month with per-day reservation bars/chips and overflow ("+N more"); prev/next/today operate on the selected unit. Persist the choice in the URL (`?view=month`) so it survives reload/share. Multi-day spanning bars and the block/confirmed styling from P5.2 must survive in both views.                                                                                                                                                                                                                 | code-writer      | P5.2    | TODO                   |
 | P11.6  | **Calendar: one bar per reservation group, not per item.** Items booked together under the same `reservations.group_id` currently render as separate bars. Collapse them into a single bar showing the **reservation title** with the included **items as a subtitle**, truncated with an ellipsis + count when the list is too long (full list in the tooltip/`title`); the bar links to `/reservations/[groupId]` as today. Ungrouped rows (`group_id IS NULL`, e.g. storefront bookings) keep rendering individually.                                                                                                                          | code-writer      | P5.2    | TODO                   |
@@ -381,45 +381,40 @@ agent, not as three parallel worktrees; likewise P11.10 builds on P11.9's shared
 
 ## ▶ Next session — start here
 
-Context: **the entire P6 admin CRUD surface plus the first P11 nav wave are merged to `master`
-(tip `97082d7`); P11.3 is done but still on `feature/P11.3-profile-page` (`298df18`).** P0–P5,
-P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit Reservation, **P6.3 Prices, P6.4
-Products, P6.5 Categories** — the 2026-09-02 wave, merged to trunk 2026-09-03 — and P6.6 Users),
-**P11.1 + P11.2** (2026-09-06, on trunk), and **P11.3** (2026-09-09, on the feature branch) are
-DONE. Engine, recurrence, repositories, real Firebase auth, app shell, weekly calendar, the
+Context: **the entire P6 admin CRUD surface, the first P11 nav wave, and P11.3 are all merged to
+`master` (tip `4cb0ec3`).** P0–P5, P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit
+Reservation, **P6.3 Prices, P6.4 Products, P6.5 Categories** — the 2026-09-02 wave, merged to trunk
+2026-09-03 — and P6.6 Users), **P11.1 + P11.2** (2026-09-06), and **P11.3** (2026-09-09) are DONE.
+Engine, recurrence, repositories, real Firebase auth, app shell, weekly calendar, the
 `@bcc/scheduler` shared package, all admin CRUD flows, **working logout, a role-accurate nav, and
-self-service `/profile`** exist and are green: **441 tests / 27 files** on trunk, **463 / 28** on
-the P11.3 branch, typecheck + lint clean on both.
-
-**⚠️ Start by deciding the base.** `feature/P11.3-profile-page` is ahead of `master` and unmerged.
-Either merge it to trunk first (human-gated) and branch from `master`, or branch from the feature
-branch — but do **not** branch from `master` and then re-land P11.3's changes to
-`lib/auth/{types,guards}.ts` / `app/layout.tsx`, which would conflict.
+self-service `/profile`** exist and are green on trunk: **463 tests / 28 files**, typecheck + lint
+clean. Trunk is current — branch straight off `master`. Note `master` is **3 commits ahead of
+`origin/master`** and unpushed.
 
 **Housekeeping**
 
 - `npm install` if `node_modules` is absent.
-- **Branch prune: DONE 2026-09-03, again 2026-09-06** — the 2026-09-03 pass deleted all 24
-  branches merged into `master` and the 7 worktrees holding them. The 2026-09-06 pass cleared
-  the four P11 wave branches (`feature/P11.1-2-ui-permissions`, `code-writer/p11.2-account-menu`,
-  and both auto-generated `worktree-agent-*` branches) and their two worktrees. **The same four
-  wave-3 leftovers still remain**, none an ancestor of `master` (their content landed via the
-  `c648610` integration merge as different commits): `code-writer/p4-auth`,
-  `code-writer/p5.1-shell`, `code-writer/p5.2-calendar`, `code-writer/p9.2-shared-pkg`. Checked —
-  they add **no unique source files** (only stale `.claude/agents/*.md` copies; everything else is
-  an older variant of a file `master` already has), so they are safe to force-delete. Two still
-  have worktrees: `git worktree remove` the two under `.claude/worktrees/`, then `git branch -D`
-  all four.
-- **New leftovers from the 2026-09-09 P11.3 run (4 branches, 2 worktrees).** The orchestrating
-  agent looked dead when its worktree was still empty, so a second `code-writer` was launched;
-  both finished, producing **two independent implementations**. `code-writer/p11.3-profile`
-  (`298df18`, 463 tests) is the one that was merged. Safe to force-delete once P11.3 reaches
-  `master`: `code-writer/p11.3-profile`, `code-writer/p11.3-profile-impl` (`6854200`, 461 tests —
-  the redundant twin), and the two auto-generated `worktree-agent-*` branches; plus
-  `git worktree remove` `.claude/worktrees/agent-ac39b91dc5ab5f8e5` and
-  `.claude/worktrees/agent-a2796a8da6e3f0126`. **Lesson for future waves:** an agent worktree
-  sitting empty means the agent is still working, not that it died — wait for the completion
-  notification before relaunching.
+- **Branch prune — 9 branches + 4 worktrees pending as of 2026-09-09, all content-verified safe.**
+  Prior passes: 2026-09-03 deleted all 24 merged branches + 7 worktrees; 2026-09-06 cleared the
+  four P11.1/P11.2 wave branches + 2 worktrees. What remains, in two groups:
+  - **Ancestors of `master`** (plain `-d` accepts them): `code-writer/p11.3-profile` (`298df18`,
+    the implementation that shipped), `feature/P11.3-profile-page` (`4cb0ec3`, = master), and both
+    auto-generated `worktree-agent-{a2796a8da6e3f0126,ac39b91dc5ab5f8e5}` (`97082d7`).
+  - **Not ancestors, need `-D`** — verified 2026-09-09 by listing files present on each branch but
+    absent from `master`: the four wave-3 leftovers (`code-writer/{p4-auth,p5.1-shell,p5.2-calendar,
+    p9.2-shared-pkg}`, content landed via the `c648610` integration merge as different commits) add
+    **only stale `.claude/agents/*.md` copies** — and those agent definitions live in
+    `~/.claude/agents/`, not the repo. `code-writer/p11.3-profile-impl` (`6854200`, 461 tests) adds
+    exactly one unique file, `app/profile/profile-form.tsx`, the discarded twin's client component
+    superseded by `profile-manager.tsx` on master. Nothing else is unique to any of them.
+  - Remove the 4 worktrees under `.claude/worktrees/` **first** — a branch checked out in a
+    worktree can't be deleted. Reuse the check before any future prune: `--merged` is an *ancestry*
+    test, not a *content* test, so for non-ancestors run
+    `git diff --diff-filter=A --name-only master <branch>` and read what comes back.
+  - **Cause of the P11.3 duplicates, worth not repeating:** the orchestrating agent's worktree was
+    still empty when checked, so its `code-writer` was judged dead and a second one launched. Both
+    finished, producing two independent implementations. **An empty agent worktree means the agent
+    is still working — wait for the completion notification before relaunching.**
 - **Fix `.gitignore`**: it has `node_modules/` with a **trailing slash**, which matches
   directories only — so the `node_modules` symlink each agent worktree needs shows as
   *untracked* and is one `git add -A` from committing an absolute-path symlink. A bare
