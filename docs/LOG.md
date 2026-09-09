@@ -433,3 +433,54 @@ plan focused on phases + status; append new entries here as work lands.
   integrating**. Both P11 worktrees and all four wave branches were pruned after the merge; the
   four wave-3 leftovers (`code-writer/{p4-auth,p5.1-shell,p5.2-calendar,p9.2-shared-pkg}`) remain.
   **Unblocks nothing formally** (no P11 item depends on another), but P11.3 is now sequenced first.
+- 2026-09-09 — **P11.3 landed: self-service profile page at `/profile`** (`298df18`, merged to
+  `feature/P11.3-profile-page`; **not yet on `master`**, tip `97082d7`). Closes the dead link the
+  P11.2 account menu knowingly shipped. Built by a `code-writer` in an isolated worktree from the
+  work order at `docs/prompts/P11.3-profile-page.md` (committed as `c7cbdbe`), verified by
+  `test-engineer`, then re-verified independently in the primary tree before hand-off.
+  **What shipped:** `app/profile/{page.tsx,profile-manager.tsx,actions.ts,state.ts,page.module.css}`,
+  `updateUserName()` in `lib/repositories/app-users.ts`, an optional `SessionUser.name` threaded
+  from `getSessionUser()`'s real path through `app/layout.tsx` into the monogram. Name is editable;
+  role, email, and last-login are read-only. No schema change (`app_users.name` already existed),
+  no new dependency, no DDL, no deploy.
+  **Security design — the reason this got a work order.** A self-service editor that can be coaxed
+  into writing someone else's row, or its own `role`, is privilege escalation, so the defense is
+  *structural*, not validation-based: (1) the form has **no target-identifier field at all** and
+  the action never reads `uid`/`id`/`email` from `FormData` — the write is keyed only off
+  `requireScheduler().uid`; (2) `updateUserName` emits `SET name = $2, updated_at = now()` and
+  nothing else, so `role`/`active`/`email`/`uid` are unreachable from this path even if the action
+  were wrong; (3) the guard is the literal first statement, before any parsing. Don't "simplify"
+  either property away. Each is pinned by a named test (`tests/profile-actions.test.ts` submits
+  `uid=someone-else-uid`/`id=other-row-id`/`email=attacker@evil.com` and asserts the session uid is
+  used; `tests/repositories.test.ts` asserts the SET-clause scope at the SQL level).
+  **Decisions:** audit action string is `user.profile.update`, mutation + `admin_audit_log` in one
+  `withTransaction`; empty/whitespace name **clears to `null`** (column is nullable, monogram falls
+  back to email); role rendered read-only as a friendly `Scheduler`/`Admin` label — spec §3 line 107
+  calls `app_users.role` "Permissions (group)", so there is **one** field, not two, and no group
+  column is to be added; `/profile` deliberately stays **out of `NAV_ITEMS`** (it belongs to the
+  account menu), so `tests/nav-guard-parity.test.ts` is structurally unaffected — confirmed, not
+  assumed. **Dev-bypass sessions have no `app_users` row**: the page renders from the session's own
+  email/role with the save control disabled and a notice, and the action returns a clean error state
+  when `updateUserName` returns `null`. It never auto-provisions (spec §3). The "before" snapshot is
+  read **inside** the transaction, unlike `app/users/actions.ts`'s `loadTargetById`.
+  **Verification:** 441 → **463 tests / 28 files**, typecheck + lint green, re-run independently in
+  the primary tree rather than taken on the agent's word. `next build` not exercised in the worktree
+  (no `.env.local` there — an env artifact, not a code defect).
+  **Existing tests changed, none weakened:** three exact-shape `toEqual` assertions on `SessionUser`
+  needed the new `name` field — `tests/auth-guards.test.ts:108` (flagged in advance) plus
+  `tests/invite-binding.test.ts` ×2 (found only by running the full suite; the invite-bind path
+  returns through the same real branch of `getSessionUser`). All stayed full-object `toEqual` — not
+  relaxed to `toMatchObject`, nothing deleted.
+  **Gotcha that cost a duplicate implementation:** the `work-distributor` returned early saying its
+  `code-writer` was "still running"; its worktree was empty with no commits, so the child was judged
+  dead and a second `code-writer` was launched directly. The first was in fact alive, and **both**
+  finished — two independent, working implementations (`code-writer/p11.3-profile` `298df18`, 463
+  tests, merged; `code-writer/p11.3-profile-impl` `6854200`, 461 tests, discarded). They converged
+  closely (same audit string, same guard-first shape, both independently hit and correctly extended
+  the same three `toEqual` assertions), which was useful corroboration but ~140k wasted tokens.
+  **Rule going forward: an empty agent worktree means the agent is still working — wait for the
+  completion notification before relaunching.** Also confirmed while reviewing:
+  `revalidatePath("/", "layout")` is real in Next 15.5.20 (the `type` arg appends a distinct
+  `/layout` cache tag), so the monogram genuinely refreshes after a rename — not a no-op.
+  **Unblocks nothing formally**, but P11.10 should reuse the echo-submitted-value-back-on-failure
+  shape from `app/profile/state.ts`; that defect class was fixed at birth here.

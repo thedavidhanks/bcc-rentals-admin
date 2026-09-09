@@ -29,16 +29,21 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-09-06)
+## Current state (as of 2026-09-09)
 
-**The first P11 nav wave is on `master`; `master` tip is `e629041`.** P11.1 (role-aware nav) and
-P11.2 (account menu with Logout) — the two user-visible breakages from the 2026-09-03 walkthrough —
-were built by two parallel `code-writer` agents in isolated worktrees, integrated on
-`feature/P11.1-2-ui-permissions` (`fafeccf`) by **path checkout rather than `git merge`**, and
-merged to trunk 2026-09-06. Verified on the integrated tree: `npm test` **441/441 (27 files)**,
-typecheck, lint, and a real `next build` all green. No schema change, no new dependency, no DB
-writes, no `TODO(P9)` markers. **8 of 10 P11 items remain**, all unblocked; **P11.3 (profile page)
-is next** because the shipped account menu links to a `/profile` route that doesn't exist yet.
+**P11.3 is done but lives on a feature branch, not trunk.** `master` tip is `97082d7`;
+`feature/P11.3-profile-page` (`298df18` + the `c7cbdbe` work-order doc) carries the `/profile`
+self-service page and is **the branch to merge next**. Verified on it: `npm test` **463/463
+(28 files)**, typecheck + lint green. No schema change (`app_users.name` already existed), no new
+dependency, no DDL, no deploy. This closes the `/profile` dead link P11.2 knowingly shipped.
+**7 of 10 P11 items remain**, all unblocked.
+
+**The first P11 nav wave is on `master`.** P11.1 (role-aware nav) and P11.2 (account menu with
+Logout) — the two user-visible breakages from the 2026-09-03 walkthrough — were built by two
+parallel `code-writer` agents in isolated worktrees, integrated on `feature/P11.1-2-ui-permissions`
+(`fafeccf`) by **path checkout rather than `git merge`**, and merged to trunk 2026-09-06 (`e629041`,
+then the docs pass `97082d7`). Verified on the integrated tree: `npm test` **441/441 (27 files)**,
+typecheck, lint, and a real `next build` all green.
 
 **P6 is feature-complete and on `master`.** The 2026-09-02 wave landed the last three admin
 CRUD screens — **P6.3 Update Prices, P6.4 Products, P6.5 Categories** — built by three parallel
@@ -353,15 +358,17 @@ Feedback from the first real walkthrough of the merged P6 surface. These are **U
 gaps**, not engine work: no schema change is required for any of them (`app_users.name` already
 exists; `items.pricing_unit` already exists). All are unblocked — P6 is DONE — and none block each
 other, so they can fan out to parallel `code-writer` worktrees. **P11.1 + P11.2 landed 2026-09-06**
-(merged to `master` `e629041`) — logout and the role-aware nav are fixed. **P11.3 is now the one to
-do next:** the account menu ships an **Update profile** link to `/profile`, which does not exist
-yet, so that entry 404s until P11.3 lands.
+(merged to `master` `e629041`) — logout and the role-aware nav are fixed. **P11.3 landed 2026-09-09**
+on `feature/P11.3-profile-page` (`298df18`, not yet on `master`), which closes the `/profile` dead
+link the account menu shipped. **7 of 10 remain**, all unblocked. Note the calendar trio
+(P11.5/P11.6/P11.7) all touch the same surface and **compose** — run them sequentially or as one
+agent, not as three parallel worktrees; likewise P11.10 builds on P11.9's shared date/time box.
 
 | ID     | Task                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Owner            | Depends | Status                 |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------- | ---------------------- |
 | P11.1  | **Nav must show only what the role can reach.** Signing in as a `scheduler` and clicking **Products** throws `ForbiddenError: Admin role required` — [app/products/page.tsx:29](../app/products/page.tsx#L29) calls `requireAdmin()`, but [components/nav/nav-config.ts:22](../components/nav/nav-config.ts#L22) has no `adminOnly: true` on the Products entry. Fix that entry **and** audit every row in `NAV_ITEMS` against the guard its page actually calls (`/prices` = `requireScheduler`, `/categories` + `/users` = `requireAdmin`, …) so the two can't drift again. Server guards stay the real boundary; this is the cosmetic half. Add a test asserting nav entries ⊆ role-reachable routes. Work order: [docs/prompts/P11.1-P11.2-nav-and-account-menu.md](./prompts/P11.1-P11.2-nav-and-account-menu.md). | code-writer      | P5.1    | **DONE (2026-09-06)** (`6cadba7`, integrated `fafeccf`, merged to master `e629041`) — Products marked `adminOnly`; new `tests/nav-guard-parity.test.ts` statically resolves every `NAV_ITEMS` href to its `app/**/page.tsx` and asserts `adminOnly` ⟺ `requireAdmin`, so nav and guards can't drift again. Audit found **no** mismatch beyond Products. |
 | P11.2  | **Account menu with Logout (PRIORITY).** [components/sign-out-button.tsx](../components/sign-out-button.tsx) exists but is **rendered nowhere**, so there is no way to log out of the app. Replace the plain user label in [components/nav/AppNav.tsx](../components/nav/AppNav.tsx) with a circular avatar button in the top-right (GitHub/Facebook style — initials or gravatar-ish monogram from `name`/`email`) that opens a dropdown containing at minimum **Update profile** (→ `/profile`, P11.3) and **Logout** (wire the existing sign-out flow → `POST /api/auth/session` delete → redirect to `/login`). Keyboard-accessible (Esc/outside-click close, focus trap, `aria-expanded`). Note the real sign-out endpoint is **`DELETE /api/auth/session`** (POST mints the cookie). Work order: [docs/prompts/P11.1-P11.2-nav-and-account-menu.md](./prompts/P11.1-P11.2-nav-and-account-menu.md). | code-writer      | P5.1    | **DONE (2026-09-06)** (`22e6bbf`, integrated `fafeccf`, merged to master `e629041`) — circular initials-monogram avatar top-right opens a dropdown with **Update profile** (`/profile`) + **Logout**; the `DELETE /api/auth/session` fetch was extracted to a shared `signOut()` so it lives in one place. Full keyboard/ARIA (Esc, outside-click, arrows, Tab wrap, focus return). Avatar sits **outside** `<nav>` so it stays in the top bar at the 48rem breakpoint. `/profile` 404s until P11.3 — accepted, see log. |
-| P11.3  | **Profile page `/profile`.** Signed-in user can view and update their own **name** (`app_users.name` — column already exists, no migration) and **see their role/group** read-only. Self-service only: the action must write only the caller's own row keyed by session UID (never accept a target uid/id from the form), leave `role`/`active` untouched, set `updated_at = now()`, and write `admin_audit_log`. Both roles may use it. Work order: [docs/prompts/P11.3-profile-page.md](./prompts/P11.3-profile-page.md).                                                                                                                                                                                                | code-writer      | P4.3    | TODO                   |
+| P11.3  | **Profile page `/profile`.** Signed-in user can view and update their own **name** (`app_users.name` — column already exists, no migration) and **see their role/group** read-only. Self-service only: the action must write only the caller's own row keyed by session UID (never accept a target uid/id from the form), leave `role`/`active` untouched, set `updated_at = now()`, and write `admin_audit_log`. Both roles may use it. Work order: [docs/prompts/P11.3-profile-page.md](./prompts/P11.3-profile-page.md).                                                                                                                                                                                                | code-writer      | P4.3    | **DONE (2026-09-09)** (`298df18`, merged to `feature/P11.3-profile-page` — **not yet on `master`**) — `/profile` renders name (editable), role/email/last-login (read-only); `updateUserName(uid, name)` sets **only** `name` + `updated_at`, so `role`/`active`/`email`/`uid` are structurally unreachable from the self-service path. Write is keyed off `requireScheduler().uid` only — the form has no target-id field at all — with mutation + `admin_audit_log` (`user.profile.update`) in one `withTransaction`. `SessionUser.name` (optional) now threads into the account-menu monogram, so the P11.2 dead link is closed. 441 → **463 tests / 28 files**. |
 | P11.4  | **Non-generic favicon.** `public/` is empty and there is no `app/icon.*`, so the site shows the browser default. Design a BCC mark (monogram, or a nod to the Hamilton County flag) and ship it as `app/icon.svg` + `app/apple-icon.png` (App Router auto-wires these into `<head>`); include a 32×32-legible variant. Keep it readable at tab size.                                                                                                                                                                                                                                                                                             | graphic-designer | —       | TODO                   |
 | P11.5  | **Calendar: week/month view toggle.** Add a view selector to `/calendar` (default stays **week**). Month view = day-cell grid for the month with per-day reservation bars/chips and overflow ("+N more"); prev/next/today operate on the selected unit. Persist the choice in the URL (`?view=month`) so it survives reload/share. Multi-day spanning bars and the block/confirmed styling from P5.2 must survive in both views.                                                                                                                                                                                                                 | code-writer      | P5.2    | TODO                   |
 | P11.6  | **Calendar: one bar per reservation group, not per item.** Items booked together under the same `reservations.group_id` currently render as separate bars. Collapse them into a single bar showing the **reservation title** with the included **items as a subtitle**, truncated with an ellipsis + count when the list is too long (full list in the tooltip/`title`); the bar links to `/reservations/[groupId]` as today. Ungrouped rows (`group_id IS NULL`, e.g. storefront bookings) keep rendering individually.                                                                                                                          | code-writer      | P5.2    | TODO                   |
@@ -375,13 +382,19 @@ yet, so that entry 404s until P11.3 lands.
 ## ▶ Next session — start here
 
 Context: **the entire P6 admin CRUD surface plus the first P11 nav wave are merged to `master`
-(tip `e629041`).** P0–P5, P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit
-Reservation, **P6.3 Prices, P6.4 Products, P6.5 Categories** — the 2026-09-02 wave, merged to
-trunk 2026-09-03 — and P6.6 Users), and now **P11.1 + P11.2** (2026-09-06) are DONE. Engine,
-recurrence, repositories, real Firebase auth, app shell, weekly calendar, the `@bcc/scheduler`
-shared package, all admin CRUD flows, **working logout, and a role-accurate nav** exist and are
-green on trunk: **441 tests / 27 files** (verified on the integrated tree 2026-09-06), typecheck
-+ lint + a real `next build` clean. Trunk is current — branch straight off `master`.
+(tip `97082d7`); P11.3 is done but still on `feature/P11.3-profile-page` (`298df18`).** P0–P5,
+P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit Reservation, **P6.3 Prices, P6.4
+Products, P6.5 Categories** — the 2026-09-02 wave, merged to trunk 2026-09-03 — and P6.6 Users),
+**P11.1 + P11.2** (2026-09-06, on trunk), and **P11.3** (2026-09-09, on the feature branch) are
+DONE. Engine, recurrence, repositories, real Firebase auth, app shell, weekly calendar, the
+`@bcc/scheduler` shared package, all admin CRUD flows, **working logout, a role-accurate nav, and
+self-service `/profile`** exist and are green: **441 tests / 27 files** on trunk, **463 / 28** on
+the P11.3 branch, typecheck + lint clean on both.
+
+**⚠️ Start by deciding the base.** `feature/P11.3-profile-page` is ahead of `master` and unmerged.
+Either merge it to trunk first (human-gated) and branch from `master`, or branch from the feature
+branch — but do **not** branch from `master` and then re-land P11.3's changes to
+`lib/auth/{types,guards}.ts` / `app/layout.tsx`, which would conflict.
 
 **Housekeeping**
 
@@ -397,35 +410,52 @@ green on trunk: **441 tests / 27 files** (verified on the integrated tree 2026-0
   an older variant of a file `master` already has), so they are safe to force-delete. Two still
   have worktrees: `git worktree remove` the two under `.claude/worktrees/`, then `git branch -D`
   all four.
+- **New leftovers from the 2026-09-09 P11.3 run (4 branches, 2 worktrees).** The orchestrating
+  agent looked dead when its worktree was still empty, so a second `code-writer` was launched;
+  both finished, producing **two independent implementations**. `code-writer/p11.3-profile`
+  (`298df18`, 463 tests) is the one that was merged. Safe to force-delete once P11.3 reaches
+  `master`: `code-writer/p11.3-profile`, `code-writer/p11.3-profile-impl` (`6854200`, 461 tests —
+  the redundant twin), and the two auto-generated `worktree-agent-*` branches; plus
+  `git worktree remove` `.claude/worktrees/agent-ac39b91dc5ab5f8e5` and
+  `.claude/worktrees/agent-a2796a8da6e3f0126`. **Lesson for future waves:** an agent worktree
+  sitting empty means the agent is still working, not that it died — wait for the completion
+  notification before relaunching.
 - **Fix `.gitignore`**: it has `node_modules/` with a **trailing slash**, which matches
   directories only — so the `node_modules` symlink each agent worktree needs shows as
   *untracked* and is one `git add -A` from committing an absolute-path symlink. A bare
   `node_modules` line is in `.git/info/exclude` as a local stopgap; fold it into `.gitignore`.
 
 **[P11 — UX polish & first-use fixes](#p11--ux-polish--first-use-fixes-human-feedback-2026-09-03)
-(from the 2026-09-03 walkthrough): 2 of 10 done.** The two outright bugs a user hit immediately —
+(from the 2026-09-03 walkthrough): 3 of 10 done.** The two outright bugs a user hit immediately —
 **P11.2** (no way to log out) and **P11.1** (schedulers saw Products but the page calls
-`requireAdmin()`) — **landed 2026-09-06** in `e629041`. **Eight remain, all unblocked and mutually
-independent** — a good parallel `code-writer` worktree wave: **P11.3** profile page (edit own name,
-see role), **P11.4** real favicon, **P11.5–P11.7** calendar week/month toggle + group-per-reservation
-bars + filter flyout (cancelled hidden by default, filter by product), **P11.8** prices show `$25/hr`
-not `$25`, **P11.9–P11.10** Add Reservation shared date/time box + no field reset on error.
+`requireAdmin()`) — **landed 2026-09-06** in `e629041`; **P11.3** (profile page) **landed
+2026-09-09** on its feature branch. **Seven remain, all unblocked:** **P11.4** real favicon,
+**P11.5–P11.7** calendar week/month toggle + group-per-reservation bars + filter flyout (cancelled
+hidden by default, filter by product), **P11.8** prices show `$25/hr` not `$25`, **P11.9–P11.10**
+Add Reservation shared date/time box + no field reset on error. They are **not** all mutually
+independent: the calendar trio composes on one surface, and P11.10 depends on P11.9's layout.
 
-**Two follow-ups the P11.1/P11.2 wave created** (details in [LOG.md](./LOG.md) 2026-09-06):
+**Follow-ups still open** (details in [LOG.md](./LOG.md) 2026-09-06 / 2026-09-09):
 
-- **P11.3 is now sequence-sensitive** — the shipped account menu links to `/profile`, which does
-  not exist, so that item 404s until P11.3 lands. Deliberate call, but it makes P11.3 the natural
-  next task.
 - **Optional hardening, not a blocker** — `getInitials` in
   [components/nav/account-menu.ts](../components/nav/account-menu.ts) renders `"@C"` for
   `@example.com` and `".."` for `...@example.com`. Unreachable through Firebase (it enforces
   non-empty local parts) and now *pinned by tests*, so changing it means updating those two tests.
+- **P11.10's defect class is already fixed in `/profile`** — the P11.3 action echoes the submitted
+  name back on failure so a rejected save doesn't wipe the field. Reuse that shape (an echo field
+  on the action-state type in `app/profile/state.ts`) when doing P11.10.
+- **Pre-transaction reads aren't try/caught** — `app/users/actions.ts` (`loadTargetById`) reads
+  before entering `withTransaction`, so a transient DB error there throws uncaught instead of
+  returning a clean error state. A codebase-wide convention, not a new defect; `app/profile`
+  deliberately does its "before" snapshot **inside** the transaction. Worth a decision someday.
 
 **Pick any of these — all unblocked, none block each other:**
 | Task | What | Owner | Notes |
 |---|---|---|---|
-| P11.3 | **(do first)** Profile page `/profile` — closes the dead link the P11.2 account menu now ships. Also lets `getInitials` start preferring the real `app_users.name` (the helper already accepts an optional `name`; it's a one-line change at the call site in `app/layout.tsx`). | code-writer | Deps P4.3 DONE. |
-| P11.4–P11.10 | Favicon, calendar view toggle + grouping + filters, price units, reservation form fixes. | code-writer / graphic-designer | New 2026-09-03; fan out. |
+| P11.9 **+** P11.10 | **(do first, as ONE agent)** Add Reservation: lift Date/Start/End into a shared "When" box above the line items, **and** stop wiping the form on error. Both edit `app/reservations/new/reservation-form.tsx` and P11.10 must echo back P11.9's shared window, so splitting them means conflict + rework. Highest-traffic staff flow. | code-writer | Deps P6.1 DONE. Copy the echo-on-failure shape from `app/profile/state.ts`. |
+| P11.5 → P11.6 → P11.7 | Calendar: week/month toggle, one bar per `group_id`, filter flyout. **Sequential, one worktree** — all three rewrite the same calendar surface and explicitly compose (P11.7 filters must respect P11.6 grouping and P11.5's view). | code-writer | Deps P5.2 DONE. Do **not** fan out to three parallel worktrees. |
+| P11.4 | Non-generic favicon — `app/icon.svg` + `app/apple-icon.png`, legible at 32×32. Cheap, fully independent, safe to run in parallel with anything above. | graphic-designer | No deps. |
+| P11.8 | Prices page shows `$25/hr` / `/day` / `/event` from `items.pricing_unit`. Formatting only; money stays integer cents. Small and independent. | code-writer | Deps P6.3 DONE. |
 | P6.7 | **(recommended)** Full-flow tests — cross-screen journeys the per-action unit tests can't reach: create product → price it → book it → cancel; recurring + multi-item booking; server-side role denial on every mutating action. | test-engineer | **Newly unblocked** — P6.1–P6.6 all DONE. |
 | P7.1 | **(main-owned, not a code-writer delegation — touches the shared prod DB)** Create a block/reservation in admin → confirm the storefront reflects it within ~30s and won't double-book that window. | main | Deps P6.1 DONE. |
 | P8.1→P8.2 | Deploy runbook, then deploy to `bcc-admin-prod`. | main | Unblocked since P10.4. Human-gated. |
