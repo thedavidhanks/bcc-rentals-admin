@@ -29,14 +29,23 @@ Status legend: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED` · `N/A`
 
 ---
 
-## Current state (as of 2026-09-09)
+## Current state (as of 2026-10-05)
 
-**P11.3 is merged to `master`; tip is `4cb0ec3`** (`298df18` feature + `c7cbdbe` work order +
+**Nothing new is on trunk since P11.3; `master` tip is `71c4064`** (`9f6e2e6` plan/log for the
+P11.3 merge, then `71c4064` adding the `next-task-prompt` skill + work-order template), **4 commits
+ahead of `origin/master` and unpushed**. **One finished branch is waiting on a human merge:**
+`code-writer/p11-9-10-reservation-form-wave` (`7e71c82`) carries **P11.9 + P11.10** — the Add
+Reservation shared "When" box and the no-wipe-on-error echo. Independently re-verified 2026-10-05
+in its worktree: typecheck + lint clean, **474 tests / 29 files**, `next build` green under dummy
+env. `git diff master..HEAD -- lib packages` is **empty**, so the P6.1 advisory-lock write path is
+provably untouched. The 2026-09-09 branch-prune backlog has since been **cleared**.
+
+**Earlier (2026-09-09): P11.3 merged to `master` at `4cb0ec3`** (`298df18` feature + `c7cbdbe` work order +
 `4cb0ec3` plan/log), via `feature/P11.3-profile-page`. The `/profile` self-service page is on
 trunk, which closes the dead link P11.2 knowingly shipped. Verified before merge: `npm test`
 **463/463 (28 files)**, typecheck + lint green. No schema change (`app_users.name` already
-existed), no new dependency, no DDL, no deploy. **`master` is 3 commits ahead of `origin/master`
-— unpushed.** **7 of 10 P11 items remain**, all unblocked.
+existed), no new dependency, no DDL, no deploy. (Commit counts and the remaining-P11 tally in this
+paragraph are superseded by the 2026-10-05 note above.)
 
 **The first P11 nav wave is on `master`.** P11.1 (role-aware nav) and P11.2 (account menu with
 Logout) — the two user-visible breakages from the 2026-09-03 walkthrough — were built by two
@@ -374,43 +383,39 @@ agent, not as three parallel worktrees; likewise P11.10 builds on P11.9's shared
 | P11.6  | **Calendar: one bar per reservation group, not per item.** Items booked together under the same `reservations.group_id` currently render as separate bars. Collapse them into a single bar showing the **reservation title** with the included **items as a subtitle**, truncated with an ellipsis + count when the list is too long (full list in the tooltip/`title`); the bar links to `/reservations/[groupId]` as today. Ungrouped rows (`group_id IS NULL`, e.g. storefront bookings) keep rendering individually.                                                                                                                          | code-writer      | P5.2    | TODO                   |
 | P11.7  | **Calendar: filter flyout.** Panel with (a) **show cancelled** toggle — cancelled reservations are **hidden by default**, and (b) **filter by product** (multi-select over `items`). Filter state in the URL so it survives navigation; show an active-filter count on the trigger. Must compose with P11.5's view toggle and P11.6's grouping (a group is shown if **any** of its items match).                                                                                                                                                                                                                                                 | code-writer      | P5.2    | TODO                   |
 | P11.8  | **Prices page: show the pricing unit.** `/prices` renders a bare `$25`; it must render `$25/hr` (and `/day`, `/event`) using `items.pricing_unit` (`hour \| day \| event`, already on the item — no schema change). Apply to base rate, effective rate, and override rows. Money stays integer cents; formatting only.                                                                                                                                                                                                                                                                                                                           | code-writer      | P6.3    | TODO                   |
-| P11.9  | **Add Reservation: one shared date/time for the whole booking.** All line items are reserved for the same window, so lift **Date / Start / End** out of the per-line-item box in [app/reservations/new/reservation-form.tsx](../app/reservations/new/reservation-form.tsx) into their own "When" box above the line items, and feed that single window to every line item on submit. Keep the recurrence controls with it. Server action + booking payload adjust accordingly (P6.1 race-safe path unchanged).                                                                                                                                   | code-writer      | P6.1    | TODO                   |
-| P11.10 | **Add Reservation: don't wipe the form on error.** When submission fails (validation or a capacity/conflict rejection) the fields reset to empty. Echo the submitted values back through the action's result state so every field — line items, contact, notes, and the shared date/time from P11.9 — retains what the user typed, with the error shown alongside. Cover with a test that a failing submit round-trips the values.                                                                                                                                                                                                                | code-writer      | P6.1    | TODO                   |
+| P11.9  | **Add Reservation: one shared date/time for the whole booking.** All line items are reserved for the same window, so lift **Date / Start / End** out of the per-line-item box in [app/reservations/new/reservation-form.tsx](../app/reservations/new/reservation-form.tsx) into their own "When" box above the line items, and feed that single window to every line item on submit. Keep the recurrence controls with it. Server action + booking payload adjust accordingly (P6.1 race-safe path unchanged). Work order: [docs/prompts/P11.9-P11.10-reservation-form-wave.md](./prompts/P11.9-P11.10-reservation-form-wave.md).                                                                                                                                   | code-writer      | P6.1    | **IN PROGRESS — verified on branch, merge pending (2026-10-05)** (`7e71c82` on `code-writer/p11-9-10-reservation-form-wave`, **not** an ancestor of `master`) — `date`/`startMinute`/`endMinute` are form-level fields now, not per-line; `buildGroup` applies the one window to every line and anchors the occurrence on it; recurrence `startsOn` is the shared date. Race-safe path untouched (`lib/` and `packages/` have **zero** diff vs master). Verified in the worktree 2026-10-05: typecheck + lint clean, **474 tests / 29 files**, `next build` green with dummy env. Awaiting human `git merge`. |
+| P11.10 | **Add Reservation: don't wipe the form on error.** When submission fails (validation or a capacity/conflict rejection) the fields reset to empty. Echo the submitted values back through the action's result state so every field — line items, contact, notes, and the shared date/time from P11.9 — retains what the user typed, with the error shown alongside. Cover with a test that a failing submit round-trips the values. Work order: [docs/prompts/P11.9-P11.10-reservation-form-wave.md](./prompts/P11.9-P11.10-reservation-form-wave.md).                                                                                                                                                                                                                | code-writer      | P6.1    | **IN PROGRESS — verified on branch, merge pending (2026-10-05)** (`7e71c82`, same branch as P11.9) — new plain module `app/reservations/new/form-values.ts` (`readSubmittedValues`/`EMPTY_SUBMITTED_VALUES`/`SubmittedValues`) captures the raw submitted strings **independently of Zod**, so the echo survives a failed parse; **all 6** error returns in `actions.ts` now carry `values`, and the form's inputs are controlled + seeded from it (the `app/profile/state.ts` shape, as planned). `values` is display-only — echoed `itemSlug`s are still re-validated against the active catalog every submit. Awaiting human `git merge`. |
 
 ---
 
 ## ▶ Next session — start here
 
 Context: **the entire P6 admin CRUD surface, the first P11 nav wave, and P11.3 are all merged to
-`master` (tip `4cb0ec3`).** P0–P5, P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit
+`master` (tip `71c4064`).** P0–P5, P9.1/P9.2, every P6 screen (P6.1 Add Reservation, P6.2 Edit
 Reservation, **P6.3 Prices, P6.4 Products, P6.5 Categories** — the 2026-09-02 wave, merged to trunk
 2026-09-03 — and P6.6 Users), **P11.1 + P11.2** (2026-09-06), and **P11.3** (2026-09-09) are DONE.
 Engine, recurrence, repositories, real Firebase auth, app shell, weekly calendar, the
 `@bcc/scheduler` shared package, all admin CRUD flows, **working logout, a role-accurate nav, and
 self-service `/profile`** exist and are green on trunk: **463 tests / 28 files**, typecheck + lint
-clean. Trunk is current — branch straight off `master`. Note `master` is **3 commits ahead of
-`origin/master`** and unpushed.
+clean. Trunk is current — branch straight off `master`. Note `master` is **4 commits ahead of
+`origin/master`** and unpushed (`71c4064` added the `next-task-prompt` skill + work-order template).
+
+**Unmerged but finished (2026-10-05):** `code-writer/p11-9-10-reservation-form-wave` (`7e71c82`)
+carries **P11.9 + P11.10** at **474 tests / 29 files**. See the merge note below the follow-ups.
 
 **Housekeeping**
 
 - `npm install` if `node_modules` is absent.
-- **Branch prune — 9 branches + 4 worktrees pending as of 2026-09-09, all content-verified safe.**
-  Prior passes: 2026-09-03 deleted all 24 merged branches + 7 worktrees; 2026-09-06 cleared the
-  four P11.1/P11.2 wave branches + 2 worktrees. What remains, in two groups:
-  - **Ancestors of `master`** (plain `-d` accepts them): `code-writer/p11.3-profile` (`298df18`,
-    the implementation that shipped), `feature/P11.3-profile-page` (`4cb0ec3`, = master), and both
-    auto-generated `worktree-agent-{a2796a8da6e3f0126,ac39b91dc5ab5f8e5}` (`97082d7`).
-  - **Not ancestors, need `-D`** — verified 2026-09-09 by listing files present on each branch but
-    absent from `master`: the four wave-3 leftovers (`code-writer/{p4-auth,p5.1-shell,p5.2-calendar,
-    p9.2-shared-pkg}`, content landed via the `c648610` integration merge as different commits) add
-    **only stale `.claude/agents/*.md` copies** — and those agent definitions live in
-    `~/.claude/agents/`, not the repo. `code-writer/p11.3-profile-impl` (`6854200`, 461 tests) adds
-    exactly one unique file, `app/profile/profile-form.tsx`, the discarded twin's client component
-    superseded by `profile-manager.tsx` on master. Nothing else is unique to any of them.
-  - Remove the 4 worktrees under `.claude/worktrees/` **first** — a branch checked out in a
-    worktree can't be deleted. Reuse the check before any future prune: `--merged` is an *ancestry*
-    test, not a *content* test, so for non-ancestors run
-    `git diff --diff-filter=A --name-only master <branch>` and read what comes back.
+- **Branch prune — DONE; the 2026-09-09 backlog is cleared (verified 2026-10-05).** All nine
+  branches and four worktrees listed in the previous pass are gone. `git branch -a` now shows only
+  `master`, `origin/master`, the unmerged `code-writer/p11-9-10-reservation-form-wave`, and the
+  stale label `worktree-agent-a775d8f9c32d3cd79`; `git worktree list` shows the primary tree plus
+  `.claude/worktrees/agent-a775d8f9c32d3cd79` (holding the P11.9/P11.10 branch). Nothing to prune
+  until that merge lands — then remove the worktree first (a branch checked out in a worktree can't
+  be deleted) and drop both leftover labels.
+  - **Keep the check for future prunes:** `--merged` is an *ancestry* test, not a *content* test,
+    so for non-ancestors run `git diff --diff-filter=A --name-only master <branch>` and read what
+    comes back before deleting.
   - **Cause of the P11.3 duplicates, worth not repeating:** the orchestrating agent's worktree was
     still empty when checked, so its `code-writer` was judged dead and a second one launched. Both
     finished, producing two independent implementations. **An empty agent worktree means the agent
@@ -424,11 +429,12 @@ clean. Trunk is current — branch straight off `master`. Note `master` is **3 c
 (from the 2026-09-03 walkthrough): 3 of 10 done.** The two outright bugs a user hit immediately —
 **P11.2** (no way to log out) and **P11.1** (schedulers saw Products but the page calls
 `requireAdmin()`) — **landed 2026-09-06** in `e629041`; **P11.3** (profile page) **landed
-2026-09-09** on its feature branch. **Seven remain, all unblocked:** **P11.4** real favicon,
-**P11.5–P11.7** calendar week/month toggle + group-per-reservation bars + filter flyout (cancelled
-hidden by default, filter by product), **P11.8** prices show `$25/hr` not `$25`, **P11.9–P11.10**
-Add Reservation shared date/time box + no field reset on error. They are **not** all mutually
-independent: the calendar trio composes on one surface, and P11.10 depends on P11.9's layout.
+2026-09-09** on its feature branch. **P11.9 + P11.10** (Add Reservation shared date/time box + no
+field reset on error) are **built and verified on a branch, merge pending** — see the merge note
+below. **Five still to build, all unblocked:** **P11.4** real favicon, **P11.5–P11.7** calendar
+week/month toggle + group-per-reservation bars + filter flyout (cancelled hidden by default, filter
+by product), **P11.8** prices show `$25/hr` not `$25`. The calendar trio composes on one surface,
+so it is sequential; P11.4 and P11.8 are fully independent.
 
 **Follow-ups still open** (details in [LOG.md](./LOG.md) 2026-09-06 / 2026-09-09):
 
@@ -436,18 +442,28 @@ independent: the calendar trio composes on one surface, and P11.10 depends on P1
   [components/nav/account-menu.ts](../components/nav/account-menu.ts) renders `"@C"` for
   `@example.com` and `".."` for `...@example.com`. Unreachable through Firebase (it enforces
   non-empty local parts) and now *pinned by tests*, so changing it means updating those two tests.
-- **P11.10's defect class is already fixed in `/profile`** — the P11.3 action echoes the submitted
-  name back on failure so a rejected save doesn't wipe the field. Reuse that shape (an echo field
-  on the action-state type in `app/profile/state.ts`) when doing P11.10.
+- ~~**P11.10's defect class is already fixed in `/profile`**~~ — **applied 2026-10-05.** The
+  Add Reservation action now echoes on the same shape as `app/profile/state.ts`, with one addition
+  worth copying next time: the echo is captured by a separate plain module
+  (`app/reservations/new/form-values.ts`) **before** Zod runs, so it survives a failed parse — a
+  state field populated inside the success branch would not.
 - **Pre-transaction reads aren't try/caught** — `app/users/actions.ts` (`loadTargetById`) reads
   before entering `withTransaction`, so a transient DB error there throws uncaught instead of
   returning a clean error state. A codebase-wide convention, not a new defect; `app/profile`
   deliberately does its "before" snapshot **inside** the transaction. Worth a decision someday.
 
-**Pick any of these — all unblocked, none block each other:**
+**First: one merge is waiting on a human.** `code-writer/p11-9-10-reservation-form-wave`
+(`7e71c82`, **P11.9 + P11.10**) is built and independently verified — typecheck + lint clean,
+**474 tests / 29 files**, `next build` green (dummy env), and `git diff master..HEAD -- lib
+packages` is **empty**, so the P6.1 advisory-lock write path is provably untouched. It is **not**
+an ancestor of `master`; nothing else below depends on it, so it can merge at any time. Its branch
+is checked out in the worktree `.claude/worktrees/agent-a775d8f9c32d3cd79` — remove that worktree
+after merging, not before (and note `git checkout` of the branch from the primary tree fails while
+it's held there). Mark both rows DONE in Phases once it lands.
+
+**Then pick any of these — all unblocked, none block each other:**
 | Task | What | Owner | Notes |
 |---|---|---|---|
-| P11.9 **+** P11.10 | **(do first, as ONE agent)** Add Reservation: lift Date/Start/End into a shared "When" box above the line items, **and** stop wiping the form on error. Both edit `app/reservations/new/reservation-form.tsx` and P11.10 must echo back P11.9's shared window, so splitting them means conflict + rework. Highest-traffic staff flow. | code-writer | Deps P6.1 DONE. Copy the echo-on-failure shape from `app/profile/state.ts`. |
 | P11.5 → P11.6 → P11.7 | Calendar: week/month toggle, one bar per `group_id`, filter flyout. **Sequential, one worktree** — all three rewrite the same calendar surface and explicitly compose (P11.7 filters must respect P11.6 grouping and P11.5's view). | code-writer | Deps P5.2 DONE. Do **not** fan out to three parallel worktrees. |
 | P11.4 | Non-generic favicon — `app/icon.svg` + `app/apple-icon.png`, legible at 32×32. Cheap, fully independent, safe to run in parallel with anything above. | graphic-designer | No deps. |
 | P11.8 | Prices page shows `$25/hr` / `/day` / `/event` from `items.pricing_unit`. Formatting only; money stays integer cents. Small and independent. | code-writer | Deps P6.3 DONE. |

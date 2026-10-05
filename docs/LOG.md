@@ -499,3 +499,59 @@ plan focused on phases + status; append new entries here as work lands.
   the discarded twin's client component (master has `profile-manager.tsx` from the implementation
   that shipped). Four more branches are plain ancestors of master. **No branch carries unique source
   worth keeping.** Worktrees must be removed before their branches can be deleted.
+- 2026-10-05 — **P11.9 + P11.10 built and independently verified on a branch; merge still pending.**
+  `code-writer/p11-9-10-reservation-form-wave`, single commit **`7e71c82`**, 7 files
+  (+771/−250). **Not** an ancestor of `master` (tip `71c4064`), so both Phases rows are
+  **IN PROGRESS — merge pending**, not DONE. Built 2026-09-09 by a `code-writer` agent per
+  [docs/prompts/P11.9-P11.10-reservation-form-wave.md](./prompts/P11.9-P11.10-reservation-form-wave.md);
+  re-verified from scratch on 2026-10-05 rather than taken on the agent's word.
+  **What shipped.** *P11.9:* `date`/`startMinute`/`endMinute` moved from the per-line schema up to
+  form level — `lineSchema` is now just `{itemSlug, quantity}` — and the two time refinements
+  (`end > start`, within one day) moved with them onto `formSchema`. `buildGroup` computes one
+  `startISO`/`endISO` per occurrence and hands the same pair to every line; the occurrence anchor,
+  previously `min(line.startMinute)`, is simply that shared start. The `perLineDate` parameter is
+  gone, and a recurring series' `startsOn` is `parsed.date` instead of the earliest per-line date.
+  *P11.10:* new plain (non-`server-only`) module `app/reservations/new/form-values.ts` exporting
+  `readSubmittedValues` / `EMPTY_SUBMITTED_VALUES` / `SubmittedValues`; `actions.ts` reads the raw
+  submission through it **first**, then adapts to the Zod input via `toParseInput`. The client
+  form's inputs became controlled, seeded from the echo by an effect keyed on the action state.
+  **Decisions worth not "optimizing" away.** (1) The echo is captured in a separate module
+  **before** validation specifically so it survives a **failed parse** — populating an echo field
+  inside the success branch, the obvious simplification, would reset the form on exactly the
+  validation errors it exists to protect. (2) `values` is **display-only**: it is never fed into
+  the write path, and echoed `itemSlug`s are still re-validated against the active catalog on every
+  submit (step d), so a tampered echo cannot book an inactive item. Both points are commented at
+  the top of `actions.ts`. (3) `toParseInput` deliberately maps `""`→`undefined` for every optional
+  string **except** `contactEmail`, which passes through so zod's
+  `.or(z.literal("").transform(() => undefined))` branch handles it — preserving the old
+  `readForm()` semantics exactly. (4) **All 6** error returns in `actions.ts` carry `values`;
+  verified by enumerating them, since five are multi-line and one is a single-line return that a
+  naive grep misses.
+  **Architectural consequence to be aware of:** per-line dates are now unrepresentable, not merely
+  unused. Spec §7 permits shared *or* per-item windows and this app has committed to shared. A
+  future "projector Friday, chairs Saturday" in one reservation is a re-expansion of the schema and
+  `buildGroup`, not a flag.
+  **Race-safety.** Unchanged and provable, not asserted: `git diff master..HEAD -- lib packages` is
+  **empty**, and `pg_advisory_xact_lock` lives in `lib/scheduler/client.ts:111`. The action still
+  calls `requireScheduler()` as its first statement and `scheduler.createBooking` inside the single
+  `withTransaction`.
+  **Verification (re-run 2026-10-05, in the agent worktree at `7e71c82`, tree clean):** `typecheck`
+  clean; `lint` no warnings or errors; `npm test` **474 passed / 474, 29 files** (463→474, 28→29 —
+  matches the commit message); `next build` compiled with all 14 routes generated, every route
+  `ƒ` dynamic. Tests added: `tests/reservation-form-values.test.ts` (9, covering the pure module)
+  plus new cases in `tests/add-reservation-action.test.ts` — a rejecting `requireScheduler`
+  short-circuits before any write, the shared window reaches every line, the series anchors on the
+  shared date, and validation/conflict/recurring submits all echo `values`.
+  **Gotcha — the worktree build.** `npm run build` there fails fast on the Zod env guard because
+  worktrees have no `.env.local`. Injecting throwaway values for `NEXT_PUBLIC_SITE_URL`,
+  `NEXT_PUBLIC_FIREBASE_{API_KEY,AUTH_DOMAIN,PROJECT_ID,APP_ID}`, `FIREBASE_PROJECT_ID` and a
+  `DATABASE_URL` pointed at a dead local address gives a real build signal with nothing touching
+  prod — every route is dynamic, so no page needs a live DB at build time. Note the guard reports
+  the public vars and the server vars in **two separate passes**, so the first retry still fails on
+  `FIREBASE_PROJECT_ID`; supply both sets at once. Never copy `.env.local` into a worktree.
+  **Also found:** the branch is checked out in `.claude/worktrees/agent-a775d8f9c32d3cd79`, so
+  `git checkout` of it from the primary tree fails with "already used by worktree" — verify in the
+  worktree instead. Separately, the 2026-09-09 prune backlog (9 branches, 4 worktrees) has since
+  been **executed**; only `master`, the branch above, and the label `worktree-agent-a775d8f9c32d3cd79`
+  remain. **Next step is a human `git merge`**, then mark both Phases rows DONE and remove the
+  worktree before deleting the branch labels.
