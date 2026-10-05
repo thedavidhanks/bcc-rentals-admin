@@ -555,3 +555,29 @@ plan focused on phases + status; append new entries here as work lands.
   been **executed**; only `master`, the branch above, and the label `worktree-agent-a775d8f9c32d3cd79`
   remain. **Next step is a human `git merge`**, then mark both Phases rows DONE and remove the
   worktree before deleting the branch labels.
+- 2026-10-05 — **P11.9 + P11.10 merged to `master` (`37109c0`); both rows now DONE.** The human ran
+  the merge. Trunk history is `71c4064` → **`057e296`** (the staged docs/plan/log/work-order commit
+  — note its `feat(P11.9 + P11.10): implement…` subject is **misleading**, it contains no code, only
+  `docs/`) → **`37109c0`**, the merge commit bringing in `7e71c82` with all 7 code files. Add
+  Reservation now has one shared "When" box and no longer wipes the form on a rejected submit.
+  **Completeness checked, not assumed.** `git diff 7e71c82 master -- app/ tests/ lib/ packages/` is
+  **empty** (the merged tree matches the verified branch tip exactly — nothing dropped or altered
+  by the merge), and `git diff 71c4064 master -- lib packages` is **empty** (the P6.1 advisory-lock
+  write path is untouched across the merge, not merely untouched on the branch).
+  **Re-verified on trunk** rather than relying on the pre-merge branch run: typecheck clean, lint
+  clean, `npm test` **474 / 474, 29 files**, and — unlike the worktree run — a **real `next build`**
+  using the primary tree's `.env.local`, which succeeded with all 14 routes emitted and every route
+  `ƒ` dynamic (so no page needs a live DB at build time; the build read nothing it shouldn't).
+  **`master` is 6 commits ahead of `origin/master` — still unpushed.**
+  **Worth knowing for next time — two things that looked like bugs and weren't.** (1) A reviewer
+  checked out the branch and "didn't see the change" on the reservations page: the Add Reservation
+  form is at **`/reservations/new`**, and there is **no `/reservations` index route** at all (only
+  `new` and `[groupId]`). (2) The same checkout silently failed — `git checkout <branch>` from the
+  primary tree aborts with *"already used by worktree"* when an agent worktree still holds that
+  branch, so the tree stayed on `master` and the dev server kept serving master's code. If a
+  merged-looking change seems absent, confirm `git rev-parse --abbrev-ref HEAD` before debugging
+  the code. Both worktree and the stale labels are cleanup now: the worktree is already removed;
+  `code-writer/p11-9-10-reservation-form-wave` is an ancestor of `master` (plain `-d`) and
+  `worktree-agent-a775d8f9c32d3cd79` is a leftover auto-label.
+  **P11 is now 5 of 10 done.** Remaining and unblocked: P11.4 (favicon), P11.5→P11.7 (calendar
+  trio, sequential on one surface), P11.8 (pricing unit on `/prices`).
