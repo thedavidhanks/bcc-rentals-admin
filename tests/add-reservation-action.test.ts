@@ -134,12 +134,14 @@ function form(fields: Record<string, string | string[]>): FormData {
   return fd;
 }
 
+// P11.9: date/startMinute/endMinute are shared form-level fields, applied to
+// every line item — not per-line anymore.
 const ONE_LINE = {
+  date: "2026-08-02",
+  startMinute: "09:00",
+  endMinute: "12:00",
   "line-0-itemSlug": "auditorium",
   "line-0-quantity": "1",
-  "line-0-date": "2026-08-02",
-  "line-0-startMinute": "09:00",
-  "line-0-endMinute": "12:00",
 };
 
 beforeEach(() => {
@@ -157,6 +159,18 @@ describe("createReservationAction — authorization", () => {
       () => undefined,
     );
     expect(requireScheduler).toHaveBeenCalledTimes(1);
+  });
+
+  it("a rejecting guard short-circuits before any listItems call, DB write, or audit row", async () => {
+    installDb({ auditorium: { id: "item-aud", total_stock: 1, buffer_minutes: 0, reserved: 0 } });
+    requireScheduler.mockRejectedValueOnce(new Error("not authenticated"));
+
+    await expect(
+      createReservationAction(initialCreateReservationState, form(ONE_LINE)),
+    ).rejects.toThrow("not authenticated");
+
+    expect(listItems).not.toHaveBeenCalled();
+    expect(sqlList()).toHaveLength(0);
   });
 });
 
@@ -202,7 +216,7 @@ describe("createReservationAction — single-item one-off (happy path)", () => {
 });
 
 describe("createReservationAction — multi-item one-off", () => {
-  it("writes one group with N reservation rows", async () => {
+  it("writes one group with N reservation rows, all sharing the one submitted window", async () => {
     installDb({
       auditorium: { id: "item-aud", total_stock: 1, buffer_minutes: 0, reserved: 0 },
       chairs: { id: "item-chairs", total_stock: 300, buffer_minutes: 0, reserved: 0 },
@@ -212,21 +226,15 @@ describe("createReservationAction — multi-item one-off", () => {
     const err = await createReservationAction(
       initialCreateReservationState,
       form({
+        date: "2026-08-02",
+        startMinute: "08:00",
+        endMinute: "18:00",
         "line-0-itemSlug": "auditorium",
         "line-0-quantity": "1",
-        "line-0-date": "2026-08-02",
-        "line-0-startMinute": "08:00",
-        "line-0-endMinute": "18:00",
         "line-1-itemSlug": "chairs",
         "line-1-quantity": "200",
-        "line-1-date": "2026-08-02",
-        "line-1-startMinute": "08:00",
-        "line-1-endMinute": "18:00",
         "line-2-itemSlug": "tent",
         "line-2-quantity": "2",
-        "line-2-date": "2026-08-02",
-        "line-2-startMinute": "08:00",
-        "line-2-endMinute": "18:00",
       }),
     ).catch((e) => e);
 
@@ -234,6 +242,14 @@ describe("createReservationAction — multi-item one-off", () => {
     expect(callsMatching("INSERT INTO reservation_groups")).toHaveLength(1);
     expect(callsMatching("INSERT INTO reservations")).toHaveLength(3);
     expect(callsMatching("INSERT INTO reservation_series")).toHaveLength(0);
+
+    // P11.9: the shared window is applied to every line — all three
+    // reservation rows carry the same start_at / end_at (params index 2/3).
+    const resvCalls = callsMatching("INSERT INTO reservations");
+    const starts = resvCalls.map((c) => (c[1] as unknown[])[2]);
+    const ends = resvCalls.map((c) => (c[1] as unknown[])[3]);
+    expect(new Set(starts)).toEqual(new Set(["2026-08-02T12:00:00.000Z"]));
+    expect(new Set(ends)).toEqual(new Set(["2026-08-02T22:00:00.000Z"]));
   });
 });
 
@@ -298,6 +314,8 @@ describe("createReservationAction — recurring", () => {
     expect(seriesParams[0]).toBe("weekly");
     expect(seriesParams[1]).toBe(2);
     expect(seriesParams[2]).toEqual([0, 2]);
+    // P11.9: the series anchor (starts_on) is the shared "When" box date.
+    expect(seriesParams[3]).toBe("2026-08-02");
     expect(seriesParams[5]).toBe(4);
     expect(seriesParams[6]).toBe("uid-scheduler");
   });
@@ -310,20 +328,18 @@ describe("createReservationAction — all-or-nothing conflict", () => {
       chairs: { id: "item-chairs", total_stock: 300, buffer_minutes: 0, reserved: 0 },
     });
 
+    const submitted = {
+      date: "2026-08-02",
+      startMinute: "09:00",
+      endMinute: "12:00",
+      "line-0-itemSlug": "auditorium",
+      "line-0-quantity": "1",
+      "line-1-itemSlug": "chairs",
+      "line-1-quantity": "50",
+    };
     const state = await createReservationAction(
       initialCreateReservationState,
-      form({
-        "line-0-itemSlug": "auditorium",
-        "line-0-quantity": "1",
-        "line-0-date": "2026-08-02",
-        "line-0-startMinute": "09:00",
-        "line-0-endMinute": "12:00",
-        "line-1-itemSlug": "chairs",
-        "line-1-quantity": "50",
-        "line-1-date": "2026-08-02",
-        "line-1-startMinute": "09:00",
-        "line-1-endMinute": "12:00",
-      }),
+      form(submitted),
     );
 
     // Returned a failure state (no redirect thrown).
@@ -343,6 +359,16 @@ describe("createReservationAction — all-or-nothing conflict", () => {
     expect(sql.some((s) => s.includes("INSERT INTO reservation_groups"))).toBe(false);
     expect(sql.some((s) => s.includes("INSERT INTO reservations"))).toBe(false);
     expect(sql.some((s) => s.includes("INSERT INTO admin_audit_log"))).toBe(false);
+
+    // P11.10: the most important echo — a capacity conflict must not wipe
+    // the form. `values` carries both line rows and the shared window back.
+    expect(state.values).toBeDefined();
+    expect(state.values!.date).toBe("2026-08-02");
+    expect(state.values!.startMinute).toBe("09:00");
+    expect(state.values!.lines).toEqual([
+      { itemSlug: "auditorium", quantity: "1" },
+      { itemSlug: "chairs", quantity: "50" },
+    ]);
   });
 });
 
@@ -367,11 +393,66 @@ describe("createReservationAction — validation", () => {
 
     const state = await createReservationAction(
       initialCreateReservationState,
-      form({ ...ONE_LINE, "line-0-startMinute": "12:00", "line-0-endMinute": "09:00" }),
+      form({ ...ONE_LINE, startMinute: "12:00", endMinute: "09:00" }),
     );
 
     expect(state.status).toBe("error");
     expect(state.fieldErrors).toBeDefined();
+    expect(state.fieldErrors!.endMinute).toBeDefined();
     expect(redirect).not.toHaveBeenCalled();
+
+    // P11.10: a validation failure echoes back everything submitted,
+    // including all line rows (§4.5 — display only, never fed to the write).
+    expect(state.values).toEqual({
+      date: "2026-08-02",
+      startMinute: "12:00",
+      endMinute: "09:00",
+      title: "",
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
+      notes: "",
+      recurring: false,
+      recurrence: {
+        freq: "weekly",
+        interval: "1",
+        byWeekday: [],
+        endMode: "count",
+        untilDate: "",
+        count: "4",
+      },
+      lines: [{ itemSlug: "auditorium", quantity: "1" }],
+    });
+  });
+
+  it("recurring: a rejected submit round-trips the recurrence fields", async () => {
+    installDb({ auditorium: { id: "item-aud", total_stock: 1, buffer_minutes: 0, reserved: 0 } });
+
+    const state = await createReservationAction(
+      initialCreateReservationState,
+      form({
+        ...ONE_LINE,
+        startMinute: "12:00",
+        endMinute: "09:00", // invalid — forces the validation-error path
+        recurring: "on",
+        "recurrence-freq": "weekly",
+        "recurrence-interval": "2",
+        "recurrence-byWeekday": ["0", "2"],
+        "recurrence-endMode": "until",
+        "recurrence-untilDate": "2026-09-01",
+      }),
+    );
+
+    expect(state.status).toBe("error");
+    expect(state.values).toBeDefined();
+    expect(state.values!.recurring).toBe(true);
+    expect(state.values!.recurrence).toEqual({
+      freq: "weekly",
+      interval: "2",
+      byWeekday: ["0", "2"],
+      endMode: "until",
+      untilDate: "2026-09-01",
+      count: "4",
+    });
   });
 });

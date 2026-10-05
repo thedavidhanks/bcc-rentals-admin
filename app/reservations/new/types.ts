@@ -4,6 +4,11 @@
 // async functions (Next.js runtime-validates every export). Interfaces are
 // erased at build time, but a plain value export like initialCreateReservationState
 // trips that guard, so all non-action exports belong here.
+//
+// Kept free of server imports (no "server-only", no DB) because the client
+// component imports this module directly.
+
+import type { SubmittedValues } from "./form-values";
 
 /** One (item × occurrence) window that failed the capacity check. */
 export interface ConflictLine {
@@ -29,6 +34,14 @@ export interface CreateReservationState {
   truncated?: boolean;
   /** Count of reservation rows written on success. */
   reservationCount?: number;
+  /**
+   * Raw values from the last submission, echoed back so a rejected save
+   * (validation failure or an all-or-nothing capacity conflict — routine on a
+   * busy calendar) does not wipe the form (P11.10). `undefined` means no
+   * submission yet — the form seeds from EMPTY_SUBMITTED_VALUES / defaultDate
+   * instead. Mirrors the echo field on app/profile/state.ts.
+   */
+  values?: SubmittedValues;
 }
 
 export const initialCreateReservationState: CreateReservationState = {
