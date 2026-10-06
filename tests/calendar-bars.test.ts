@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyCalendarFilters,
   buildCalendarBars,
   buildItemSubtitle,
+  countActiveFilters,
   ITEM_SUBTITLE_MAX_NAMES,
+  parseCalendarParams,
+  type CalendarBar,
   type CalendarBarItem,
 } from "../lib/calendar/bars";
 import type { ReservationRow, ReservationStatus } from "../lib/repositories/types";
@@ -181,5 +185,146 @@ describe("buildCalendarBars — grouping (P11.6)", () => {
       expect(bars[0].subtitle).toBe("Auditorium, Room A +2");
       expect(buildItemSubtitle(bars[0].itemNames)).toBe(bars[0].subtitle);
     });
+  });
+});
+
+describe("parseCalendarParams — filter parsing (P11.7)", () => {
+  it("no params ⇒ cancelled hidden, no product filter", () => {
+    const { filters } = parseCalendarParams({});
+    expect(filters.showCancelled).toBe(false);
+    expect(filters.itemSlugs).toBeNull();
+  });
+
+  it("?cancelled=1 ⇒ shown", () => {
+    const { filters } = parseCalendarParams({ cancelled: "1" });
+    expect(filters.showCancelled).toBe(true);
+  });
+
+  it("anything other than exactly '1' for cancelled ⇒ hidden (malformed falls back to default)", () => {
+    expect(parseCalendarParams({ cancelled: "true" }).filters.showCancelled).toBe(false);
+    expect(parseCalendarParams({ cancelled: "0" }).filters.showCancelled).toBe(false);
+  });
+
+  it("?items= empty ⇒ show all (null, never an empty array)", () => {
+    const { filters } = parseCalendarParams({ items: "" });
+    expect(filters.itemSlugs).toBeNull();
+  });
+
+  it("parses a comma-separated ?items= into a slug list", () => {
+    const { filters } = parseCalendarParams({ items: "auditorium,room-a" });
+    expect(filters.itemSlugs).toEqual(["auditorium", "room-a"]);
+  });
+
+  it("accepts repeated ?items= params (the flyout's checkbox form shape)", () => {
+    const { filters } = parseCalendarParams({ items: ["auditorium", "room-a"] });
+    expect(filters.itemSlugs).toEqual(["auditorium", "room-a"]);
+  });
+
+  it("drops blank entries and never errors on a malformed list", () => {
+    const { filters } = parseCalendarParams({ items: "auditorium,,  ,room-a" });
+    expect(filters.itemSlugs).toEqual(["auditorium", "room-a"]);
+  });
+
+  it("?view= absent ⇒ week; 'month' ⇒ month; garbage ⇒ week", () => {
+    expect(parseCalendarParams({}).view).toBe("week");
+    expect(parseCalendarParams({ view: "month" }).view).toBe("month");
+    expect(parseCalendarParams({ view: "nonsense" }).view).toBe("week");
+  });
+
+  it("passes through an unrecognized/unknown slug without error (ignored at match time)", () => {
+    const { filters } = parseCalendarParams({ items: "not-a-real-product" });
+    expect(filters.itemSlugs).toEqual(["not-a-real-product"]);
+  });
+});
+
+describe("applyCalendarFilters (P11.7)", () => {
+  function barWith(overrides: Partial<CalendarBar>): CalendarBar {
+    return {
+      key: "k1",
+      start_at: new Date("2026-07-20T12:00:00Z"),
+      end_at: new Date("2026-07-20T14:00:00Z"),
+      status: "block",
+      groupId: null,
+      label: "Test",
+      itemNames: ["Auditorium"],
+      itemSlugs: ["auditorium"],
+      itemIds: ["item-1"],
+      subtitle: "Auditorium",
+      customerName: null,
+      notes: null,
+      ...overrides,
+    };
+  }
+
+  it("hides cancelled bars by default", () => {
+    const bars = [barWith({ key: "a", status: "cancelled" }), barWith({ key: "b", status: "block" })];
+    const visible = applyCalendarFilters(bars, { showCancelled: false, itemSlugs: null });
+    expect(visible.map((b) => b.key)).toEqual(["b"]);
+  });
+
+  it("shows cancelled bars when showCancelled is true", () => {
+    const bars = [barWith({ key: "a", status: "cancelled" }), barWith({ key: "b", status: "block" })];
+    const visible = applyCalendarFilters(bars, { showCancelled: true, itemSlugs: null });
+    expect(visible.map((b) => b.key)).toEqual(["a", "b"]);
+  });
+
+  it("a 3-item group's bar passes the product filter when exactly 1 item matches", () => {
+    const bar = barWith({
+      itemSlugs: ["auditorium", "room-a", "room-b"],
+      itemNames: ["Auditorium", "Room A", "Room B"],
+    });
+    const visible = applyCalendarFilters([bar], {
+      showCancelled: false,
+      itemSlugs: ["room-a"],
+    });
+    expect(visible).toHaveLength(1);
+  });
+
+  it("filters out a bar touching none of the selected products", () => {
+    const bar = barWith({ itemSlugs: ["chairs"] });
+    const visible = applyCalendarFilters([bar], {
+      showCancelled: false,
+      itemSlugs: ["auditorium"],
+    });
+    expect(visible).toHaveLength(0);
+  });
+
+  it("an unknown slug in the filter simply matches nothing extra — no error", () => {
+    const bar = barWith({ itemSlugs: ["auditorium"] });
+    const visible = applyCalendarFilters([bar], {
+      showCancelled: false,
+      itemSlugs: ["not-a-real-product"],
+    });
+    expect(visible).toHaveLength(0);
+  });
+
+  it("filters rows post-grouping, never pre-grouping (sibling rows stay intact)", () => {
+    const rows = [
+      row({ group_id: "g1", item_id: "item-1" }), // Auditorium
+      row({ group_id: "g1", item_id: "item-4" }), // Chairs — not the filtered slug
+    ];
+    const bars = buildCalendarBars(rows, ITEMS, new Map());
+    const visible = applyCalendarFilters(bars, { showCancelled: false, itemSlugs: ["auditorium"] });
+    expect(visible).toHaveLength(1);
+    // The group's full item list survives — Chairs wasn't dropped by the filter.
+    expect(visible[0].itemNames).toEqual(["Auditorium", "Chairs"]);
+  });
+});
+
+describe("countActiveFilters (P11.7)", () => {
+  it("is 0 with defaults", () => {
+    expect(countActiveFilters({ showCancelled: false, itemSlugs: null })).toBe(0);
+  });
+
+  it("counts 'show cancelled' as 1", () => {
+    expect(countActiveFilters({ showCancelled: true, itemSlugs: null })).toBe(1);
+  });
+
+  it("counts one per selected product", () => {
+    expect(countActiveFilters({ showCancelled: false, itemSlugs: ["a", "b", "c"] })).toBe(3);
+  });
+
+  it("sums both", () => {
+    expect(countActiveFilters({ showCancelled: true, itemSlugs: ["a", "b"] })).toBe(3);
   });
 });

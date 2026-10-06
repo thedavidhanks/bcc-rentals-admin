@@ -4,7 +4,10 @@ import { requireScheduler } from "@/lib/auth/guards";
 import {
   type CalendarBar,
   type CalendarBarItem,
+  applyCalendarFilters,
   buildCalendarBars,
+  countActiveFilters,
+  parseCalendarParams,
 } from "@/lib/calendar/bars";
 import {
   BCC_TIMEZONE,
@@ -18,8 +21,10 @@ import {
   weekRangeForAnchor,
   type PlacedBar,
 } from "@/lib/calendar/week";
+import { formatDays } from "@/lib/scheduler/recurrence";
 import type { ReservationRow, ReservationStatus } from "@/lib/repositories/types";
 
+import { FilterFlyout, type FilterFlyoutItem } from "./filter-flyout";
 import styles from "./page.module.css";
 
 // The calendar reads the live DB per request and depends on ?week — never
@@ -37,6 +42,8 @@ interface CalendarData {
   rows: ReservationRow[];
   items: Map<string, CalendarBarItem>;
   groupTitles: Map<string, string | null>;
+  /** Full catalog (slug + name), for the filter flyout's product checkboxes. */
+  catalog: FilterFlyoutItem[];
 }
 
 async function loadCalendarData(start: Date, end: Date): Promise<CalendarData> {
@@ -56,6 +63,7 @@ async function loadCalendarData(start: Date, end: Date): Promise<CalendarData> {
   ]);
 
   const items = new Map(itemRows.map((i) => [i.id, { name: i.name, slug: i.slug }]));
+  const catalog = itemRows.map((i) => ({ slug: i.slug, name: i.name }));
 
   const groupIds = Array.from(
     new Set(rows.map((r) => r.group_id).filter((id): id is string => id !== null)),
@@ -63,7 +71,7 @@ async function loadCalendarData(start: Date, end: Date): Promise<CalendarData> {
   const groups = await listReservationGroupsByIds(groupIds);
   const groupTitles = new Map(groups.map((g) => [g.id, g.title]));
 
-  return { rows, items, groupTitles };
+  return { rows, items, groupTitles, catalog };
 }
 
 // ---------------------------------------------------------------------------
@@ -128,14 +136,19 @@ function sortForRender(a: LaidOutBar, b: LaidOutBar): number {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string | string[] }>;
+  searchParams: Promise<{
+    week?: string | string[];
+    view?: string | string[];
+    cancelled?: string | string[];
+    items?: string | string[];
+  }>;
 }) {
   // Scheduler+admin view; unauthenticated/unknown users are redirected/denied
   // (P4.3, resolved at wave-3 integration — replaces the prior TODO placeholder).
   await requireScheduler();
 
   const params = await searchParams;
-  const weekParam = Array.isArray(params.week) ? params.week[0] : params.week;
+  const { weekParam, filters } = parseCalendarParams(params);
 
   const now = new Date();
   const anchorDay = resolveAnchorDay(weekParam, now);
@@ -148,11 +161,14 @@ export default async function CalendarPage({
   const windowEnd = easternMidnightInstant(range.endDay + 1);
 
   let laidOut: LaidOutBar[] = [];
+  let catalog: FilterFlyoutItem[] = [];
   let loadError: string | null = null;
   try {
-    const { rows, items, groupTitles } = await loadCalendarData(windowStart, windowEnd);
-    const bars = buildCalendarBars(rows, items, groupTitles);
-    laidOut = bars
+    const data = await loadCalendarData(windowStart, windowEnd);
+    catalog = data.catalog;
+    const bars = buildCalendarBars(data.rows, data.items, data.groupTitles);
+    const visibleBars = applyCalendarFilters(bars, filters);
+    laidOut = visibleBars
       .map((bar): LaidOutBar | null => {
         const placement = placeInWeek(bar, range);
         if (!placement) return null;
@@ -193,6 +209,14 @@ export default async function CalendarPage({
         >
           Next ›
         </Link>
+        <FilterFlyout
+          items={catalog}
+          showCancelled={filters.showCancelled}
+          selectedSlugs={filters.itemSlugs ?? []}
+          weekIso={formatDays(anchorDay)}
+          view="week"
+          activeCount={countActiveFilters(filters)}
+        />
         <Link
           className={styles.addBtn}
           href={ADD_RESERVATION_HREF}

@@ -168,3 +168,98 @@ export function buildCalendarBars(
     buildBarFromRows(key, groupId, groupRows, groupId ? groupTitles.get(groupId) : undefined, items),
   );
 }
+
+// ---------------------------------------------------------------------------
+// URL-driven filtering (P11.7)
+// ---------------------------------------------------------------------------
+
+/** The calendar's filter state, always sourced from the URL (never useState). */
+export interface CalendarFilters {
+  /** `?cancelled=1` — absent/anything else ⇒ hidden (default changed by P11.7). */
+  showCancelled: boolean;
+  /**
+   * `?items=slug-a,slug-b` — `null` means "no product filter, show everything".
+   * A non-null, non-empty list restricts to bars touching at least one slug.
+   * Never empty-but-non-null: an empty selection is normalized to `null` so
+   * "show nothing" can never happen by accident.
+   */
+  itemSlugs: string[] | null;
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * Parse the `?items=` filter. Accepts either representation so it round-trips
+ * through both an address bar (`items=a,b`, one param) and the flyout's
+ * `<form method="GET">` (repeated `items=a&items=b` checkboxes, Next collapses
+ * same-name params into an array) — comma-split each entry either way. Blank
+ * entries are dropped; an empty result normalizes to `null` ("show all").
+ * Unknown slugs are parsed through as-is — matching against real bars'
+ * `itemSlugs` is what "ignores" them, with no page error (work order §3.2).
+ */
+function parseItemSlugs(value: string | string[] | undefined): string[] | null {
+  if (value === undefined) return null;
+  const raw = Array.isArray(value) ? value : [value];
+  const slugs = raw
+    .flatMap((v) => v.split(","))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return slugs.length > 0 ? slugs : null;
+}
+
+/** The calendar view mode (P11.5). No/garbage param ⇒ `"week"`. */
+export type CalendarView = "week" | "month";
+
+/** The pure, URL-derived slice of calendar state (work order §2). */
+export interface CalendarParams {
+  view: CalendarView;
+  /** Raw `?week=` value, further resolved by `resolveAnchorDay` (week.ts). */
+  weekParam: string | undefined;
+  filters: CalendarFilters;
+}
+
+/**
+ * Parse `?week=&view=&cancelled=&items=` defensively: malformed/garbage input
+ * always falls back to the default rather than erroring the page (same spirit
+ * as `resolveAnchorDay`, lib/calendar/week.ts).
+ */
+export function parseCalendarParams(searchParams: {
+  week?: string | string[];
+  view?: string | string[];
+  cancelled?: string | string[];
+  items?: string | string[];
+}): CalendarParams {
+  const view: CalendarView = firstParam(searchParams.view) === "month" ? "month" : "week";
+  const weekParam = firstParam(searchParams.week);
+  const showCancelled = firstParam(searchParams.cancelled) === "1";
+  const itemSlugs = parseItemSlugs(searchParams.items);
+  return { view, weekParam, filters: { showCancelled, itemSlugs } };
+}
+
+/**
+ * Apply both filters to the already-grouped bar list (never to raw rows —
+ * filtering rows first would drop a matching group's non-matching sibling
+ * rows and corrupt its envelope/item list, work order §3.2). The product
+ * filter matches per BAR: a group passes if >=1 of its items matches.
+ */
+export function applyCalendarFilters(bars: CalendarBar[], filters: CalendarFilters): CalendarBar[] {
+  return bars.filter((bar) => {
+    if (!filters.showCancelled && bar.status === "cancelled") return false;
+    if (filters.itemSlugs && !bar.itemSlugs.some((slug) => filters.itemSlugs!.includes(slug))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Active-filter count for the flyout trigger badge. Counting rule (work order
+ * §3.2): "show cancelled" contributes 1 when on; the product filter
+ * contributes one count per selected product (not 1 for "any selected") so
+ * the badge reflects how narrow the view actually is.
+ */
+export function countActiveFilters(filters: CalendarFilters): number {
+  return (filters.showCancelled ? 1 : 0) + (filters.itemSlugs?.length ?? 0);
+}
