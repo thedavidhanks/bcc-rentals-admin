@@ -2,6 +2,11 @@ import Link from "next/link";
 
 import { requireScheduler } from "@/lib/auth/guards";
 import {
+  type CalendarBar,
+  type CalendarBarItem,
+  buildCalendarBars,
+} from "@/lib/calendar/bars";
+import {
   BCC_TIMEZONE,
   buildWeekDays,
   easternDayNumber,
@@ -28,27 +33,37 @@ const ADD_RESERVATION_HREF = "/reservations/new"; // owned by P6.1 (placeholder 
 // Data loading (deferred import: keeps the build free of DB/env requirements)
 // ---------------------------------------------------------------------------
 
-interface WeekData {
-  reservations: ReservationRow[];
-  itemNames: Map<string, string>;
+interface CalendarData {
+  rows: ReservationRow[];
+  items: Map<string, CalendarBarItem>;
+  groupTitles: Map<string, string | null>;
 }
 
-async function loadWeekData(start: Date, end: Date): Promise<WeekData> {
+async function loadCalendarData(start: Date, end: Date): Promise<CalendarData> {
   // Imported lazily so `next build` (which runs without DATABASE_URL) does not
   // evaluate lib/env's boot-time validation. At request time env is present.
-  const [{ listReservationsInRange }, { listItems }] = await Promise.all([
-    import("@/lib/repositories/reservations"),
-    import("@/lib/repositories/items"),
-  ]);
+  const [{ listReservationsInRange }, { listItems }, { listReservationGroupsByIds }] =
+    await Promise.all([
+      import("@/lib/repositories/reservations"),
+      import("@/lib/repositories/items"),
+      import("@/lib/repositories/reservation-groups"),
+    ]);
 
-  const [reservations, items] = await Promise.all([
-    // Include cancelled so they can be greyed out (spec §9).
+  const [rows, itemRows] = await Promise.all([
+    // Include cancelled so they can be greyed out / hidden by the filter (P11.7).
     listReservationsInRange(start, end, { includeCancelled: true }),
     listItems(),
   ]);
 
-  const itemNames = new Map(items.map((i) => [i.id, i.name]));
-  return { reservations, itemNames };
+  const items = new Map(itemRows.map((i) => [i.id, { name: i.name, slug: i.slug }]));
+
+  const groupIds = Array.from(
+    new Set(rows.map((r) => r.group_id).filter((id): id is string => id !== null)),
+  );
+  const groups = await listReservationGroupsByIds(groupIds);
+  const groupTitles = new Map(groups.map((g) => [g.id, g.title]));
+
+  return { rows, items, groupTitles };
 }
 
 // ---------------------------------------------------------------------------
@@ -83,11 +98,27 @@ function statusLabel(status: ReservationStatus): string {
   return "Block";
 }
 
-/** A reservation resolved to a week placement, ready to render. */
+/** A bar resolved to a week placement, ready to render. */
 interface LaidOutBar {
-  reservation: ReservationRow;
-  bar: PlacedBar;
-  itemName: string;
+  bar: CalendarBar;
+  placement: PlacedBar;
+}
+
+/**
+ * Stable render order: active bars first, then left-to-right by column, then
+ * earliest start, with a final tie-break on the bar's own stable `key` —
+ * never on `Map`/object iteration order (work order §3.1).
+ */
+function sortForRender(a: LaidOutBar, b: LaidOutBar): number {
+  const ac = a.bar.status === "cancelled" ? 1 : 0;
+  const bc = b.bar.status === "cancelled" ? 1 : 0;
+  if (ac !== bc) return ac - bc;
+  if (a.placement.startCol !== b.placement.startCol) {
+    return a.placement.startCol - b.placement.startCol;
+  }
+  const startDiff = a.bar.start_at.getTime() - b.bar.start_at.getTime();
+  if (startDiff !== 0) return startDiff;
+  return a.bar.key.localeCompare(b.bar.key);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,29 +147,19 @@ export default async function CalendarPage({
   const windowStart = easternMidnightInstant(range.startDay);
   const windowEnd = easternMidnightInstant(range.endDay + 1);
 
-  let bars: LaidOutBar[] = [];
+  let laidOut: LaidOutBar[] = [];
   let loadError: string | null = null;
   try {
-    const { reservations, itemNames } = await loadWeekData(windowStart, windowEnd);
-    bars = reservations
-      .map((reservation): LaidOutBar | null => {
-        const bar = placeInWeek(reservation, range);
-        if (!bar) return null;
-        return {
-          reservation,
-          bar,
-          itemName: itemNames.get(reservation.item_id) ?? "Unknown item",
-        };
+    const { rows, items, groupTitles } = await loadCalendarData(windowStart, windowEnd);
+    const bars = buildCalendarBars(rows, items, groupTitles);
+    laidOut = bars
+      .map((bar): LaidOutBar | null => {
+        const placement = placeInWeek(bar, range);
+        if (!placement) return null;
+        return { bar, placement };
       })
       .filter((b): b is LaidOutBar => b !== null)
-      // Active bars first, then left-to-right, then earliest start.
-      .sort((a, b) => {
-        const ac = a.reservation.status === "cancelled" ? 1 : 0;
-        const bc = b.reservation.status === "cancelled" ? 1 : 0;
-        if (ac !== bc) return ac - bc;
-        if (a.bar.startCol !== b.bar.startCol) return a.bar.startCol - b.bar.startCol;
-        return a.reservation.start_at.getTime() - b.reservation.start_at.getTime();
-      });
+      .sort(sortForRender);
   } catch {
     loadError =
       "Could not load reservations. Check the database connection and try again.";
@@ -195,58 +216,55 @@ export default async function CalendarPage({
       </div>
 
       <div className={styles.weekBody}>
-        {bars.length === 0 && !loadError && (
+        {laidOut.length === 0 && !loadError && (
           <p className={styles.empty}>No reservations this week.</p>
         )}
-        {bars.map(({ reservation, bar, itemName }, index) => {
+        {laidOut.map(({ bar, placement }, index) => {
           const title = [
-            `${itemName} — ${statusLabel(reservation.status)}`,
-            `${dateTimeFmt.format(reservation.start_at)} → ${dateTimeFmt.format(reservation.end_at)}`,
-            reservation.customer_name ? `Contact: ${reservation.customer_name}` : null,
-            reservation.notes ? `Notes: ${reservation.notes}` : null,
+            `${bar.label} — ${statusLabel(bar.status)}`,
+            bar.itemNames.length > 0 ? `Items: ${bar.itemNames.join(", ")}` : null,
+            `${dateTimeFmt.format(bar.start_at)} → ${dateTimeFmt.format(bar.end_at)}`,
+            bar.customerName ? `Contact: ${bar.customerName}` : null,
+            bar.notes ? `Notes: ${bar.notes}` : null,
           ]
             .filter(Boolean)
             .join("\n");
-          // Bars with a group_id link to the Edit Reservation page (P6.2);
-          // storefront confirmed rows may have no group — those stay
-          // non-clickable. The rendered box is identical either way.
+          // Bars with a group_id link to the Edit Reservation page (P6.2); it
+          // now represents N rows instead of 1. Storefront confirmed rows may
+          // have no group — those stay non-clickable. Same rendered box either way.
           const barProps = {
-            className: `${styles.bar} ${statusClass(reservation.status)}`,
+            className: `${styles.bar} ${statusClass(bar.status)}`,
             style: {
-              gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
+              gridColumn: `${placement.startCol + 1} / ${placement.endCol + 2}`,
               gridRow: index + 1,
             },
             title,
           };
           const barBody = (
             <>
-              {bar.continuesBefore && (
+              {placement.continuesBefore && (
                 <span className={styles.cont} aria-label="continues from previous week">
                   ‹
                 </span>
               )}
               <span className={styles.barLabel}>
-                {itemName}
-                {reservation.customer_name ? ` · ${reservation.customer_name}` : ""}
+                {bar.label}
+                {bar.subtitle ? ` · ${bar.subtitle}` : ""}
               </span>
-              <span className={styles.barMeta}>{statusLabel(reservation.status)}</span>
-              {bar.continuesAfter && (
+              <span className={styles.barMeta}>{statusLabel(bar.status)}</span>
+              {placement.continuesAfter && (
                 <span className={styles.cont} aria-label="continues into next week">
                   ›
                 </span>
               )}
             </>
           );
-          return reservation.group_id ? (
-            <Link
-              key={reservation.id}
-              href={`/reservations/${reservation.group_id}`}
-              {...barProps}
-            >
+          return bar.groupId ? (
+            <Link key={bar.key} href={`/reservations/${bar.groupId}`} {...barProps}>
               {barBody}
             </Link>
           ) : (
-            <div key={reservation.id} {...barProps}>
+            <div key={bar.key} {...barProps}>
               {barBody}
             </div>
           );

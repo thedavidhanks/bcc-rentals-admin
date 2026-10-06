@@ -29,6 +29,7 @@ import {
   cancelReservationsBySeries,
   listReservationsInRange,
 } from "../lib/repositories/reservations";
+import { listReservationGroupsByIds } from "../lib/repositories/reservation-groups";
 import {
   countActiveAdmins,
   getUserByUid,
@@ -212,6 +213,25 @@ describe("reservations repository", () => {
     await cancelReservationsBySeries("s1", { includePast: true }, client);
     expect(norm(calls[0].text)).not.toContain("start_at >=");
     expect(calls[0].values).toEqual(["s1"]);
+  });
+});
+
+describe("reservation_groups repository", () => {
+  it("listReservationGroupsByIds uses = ANY with a uuid[] cast", async () => {
+    const { client, calls } = makeClient({ rows: [{ id: "g1" }, { id: "g2" }] });
+    const result = await listReservationGroupsByIds(["g1", "g2"], client);
+    expect(result).toEqual([{ id: "g1" }, { id: "g2" }]);
+    const sql = norm(calls[0].text);
+    expect(sql).toContain("WHERE id = ANY($1::uuid[])");
+    expect(calls[0].values).toEqual([["g1", "g2"]]);
+  });
+
+  it("listReservationGroupsByIds issues no query for an empty ids array", async () => {
+    const { client, calls, query } = makeClient();
+    const result = await listReservationGroupsByIds([], client);
+    expect(result).toEqual([]);
+    expect(query).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
   });
 });
 

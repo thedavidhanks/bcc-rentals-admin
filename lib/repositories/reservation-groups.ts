@@ -74,6 +74,22 @@ export async function listReservationGroupsBySeries(
   return rows;
 }
 
+/**
+ * Batch-load groups by id for the calendar's grouped-bar rendering (P11.6).
+ * One round trip; returns `[]` for an empty `ids` array without querying.
+ */
+export async function listReservationGroupsByIds(
+  ids: string[],
+  client?: Queryable,
+): Promise<ReservationGroupRow[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await executor(client).query<ReservationGroupRow>(
+    `SELECT ${GROUP_COLUMNS} FROM reservation_groups WHERE id = ANY($1::uuid[])`,
+    [ids],
+  );
+  return rows;
+}
+
 export async function updateReservationGroup(
   id: string,
   patch: ReservationGroupUpdate,
