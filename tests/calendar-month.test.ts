@@ -46,6 +46,30 @@ describe("monthGridForAnchor", () => {
     }
   });
 
+  it("builds a December grid whose trailing fill days spill into January of the next year", () => {
+    const grid = monthGridForAnchor(daysFromCivil(2026, 12, 15));
+    expect(grid.label).toBe("December 2026");
+    expect(formatDays(grid.monthStartDay)).toBe("2026-12-01");
+    expect(formatDays(grid.monthEndDay)).toBe("2026-12-31");
+    expect(formatDays(grid.weeks[0].startDay)).toBe("2026-11-29");
+    const lastWeek = grid.weeks[grid.weeks.length - 1];
+    expect(formatDays(lastWeek.endDay)).toBe("2027-01-02");
+  });
+
+  it("builds a January grid whose leading fill days reach back into December of the prior year", () => {
+    const grid = monthGridForAnchor(daysFromCivil(2027, 1, 15));
+    expect(grid.label).toBe("January 2027");
+    expect(formatDays(grid.monthStartDay)).toBe("2027-01-01");
+    expect(formatDays(grid.monthEndDay)).toBe("2027-01-31");
+    expect(formatDays(grid.weeks[0].startDay)).toBe("2026-12-27");
+  });
+
+  it("builds a 29-day February grid in a leap year without drifting into March early", () => {
+    const grid = monthGridForAnchor(daysFromCivil(2028, 2, 10));
+    expect(formatDays(grid.monthStartDay)).toBe("2028-02-01");
+    expect(formatDays(grid.monthEndDay)).toBe("2028-02-29");
+  });
+
   it("a reservation spanning the month boundary appears in the correct week row(s)", () => {
     // 2026-08 grid's last row is 2026-08-30 .. 2026-09-05 (per the test above).
     const grid = monthGridForAnchor(daysFromCivil(2026, 8, 10));
