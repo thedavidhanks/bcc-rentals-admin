@@ -29,8 +29,10 @@ Before assigning anything, you — and **every** subagent that touches code — 
   `items.updated_at = now()`; integer cents / Eastern minutes-since-midnight; race-safe
   advisory-lock writes> — and the **agent model** note (agents are already pinned to full
   versioned model IDs — launch them with **no** `model:` override).
-- [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md) — the **<IDs>** row(s) in §<phase>, and the
-  isolation / worktree setup / merge protocol reminders at the bottom.
+- Issue **#<N>** (`<IDs>`) on the [board](https://github.com/users/thedavidhanks/projects/4) —
+  the requirement source: its `## Background` citations and `## Acceptance criteria`.
+- [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md) — `## Safety rails` and
+  `## Working notes for agent waves` (isolation, worktree setup, merge protocol).
 - [docs/ADMIN_APP_SPEC.md](../ADMIN_APP_SPEC.md) — **§<n>** (<what's there>), **§<n>** (<…>).
 - The precedent implementation to mirror: [<path>](../../<path>) + [<path>](../../<path>) +
   [tests/<name>.test.ts](../../tests/<name>.test.ts) (<task ID that shipped it>). Same shapes:
@@ -169,8 +171,9 @@ Per branch and again on the integration branch:
 4. **Report:** branch name(s), test counts (<N> → ?), the §4 decisions you took, the exact audit
    `action` string(s) used, confirmation that each §3 item has a named test behind it, and
    anything you changed in existing tests (and why).
-5. Do **not** edit [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md) or [docs/LOG.md](../LOG.md)
-   status — a human marks <IDs> DONE after the merge.
+5. Do **not** close issue #<N>, change its board status, or edit [docs/LOG.md](../LOG.md) — a
+   human merges, then records it. Put `Closes #<N>` in your branch's final commit message so
+   the merge closes the issue automatically.
 
 **Do not start <adjacent task IDs>.** <One line on why they're a separate wave.>
 ```

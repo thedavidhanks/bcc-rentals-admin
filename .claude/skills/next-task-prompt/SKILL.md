@@ -1,55 +1,70 @@
 ---
 name: next-task-prompt
-description: Write an AI work-order prompt for the next task in docs/EXECUTION_PLAN.md and save it to docs/prompts/. Use when the user asks to "write a prompt for the next task", "create a work order", "prompt for P11.5", or wants the next unblocked plan task turned into an agent-ready brief.
+description: Write an AI work-order prompt for the next open issue on the BCC Rentals board and save it to docs/prompts/. Use when the user asks to "write a prompt for the next task", "create a work order", "prompt for P11.5", or wants the next unblocked issue turned into an agent-ready brief.
 ---
 
 # Write a work order for the next task
 
-Turns a task (or small wave of tasks) from
-[docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) into a self-contained **work order** —
-the prompt a `work-distributor` / `code-writer` agent is launched with — and saves it to
-[docs/prompts/](../../../docs/prompts/).
+Turns an open issue (or small wave of issues) from
+**[Project #4](https://github.com/users/thedavidhanks/projects/4)** into a self-contained
+**work order** — the prompt a `work-distributor` / `code-writer` agent is launched with — and
+saves it to [docs/prompts/](../../../docs/prompts/).
 
 The bar: an agent that reads **only** the work order plus the files it names can do the task
 correctly without asking a question. Every existing prompt in `docs/prompts/` clears that bar;
 match them. Use [references/work-order-template.md](references/work-order-template.md) as the
 skeleton.
 
-This skill **writes a prompt file only**. It does not implement the task, launch agents, edit the
-plan's status, or merge anything.
+This skill **writes a prompt file only**. It does not implement the task, launch agents, change
+the issue's status, or merge anything.
+
+**When a work order is worth writing at all:** every issue already embeds an `## Agent prompt`
+(or a human `## Brief`) written to the same bar. For a single, well-scoped issue that prompt is
+often enough — launch straight from it. Write a work order when you are **bundling a wave**
+(file-ownership seams, sequencing), when research since filing has changed the picture, or when
+the user asks for one.
 
 ## Procedure
 
-### 1. Read the plan before anything else
+### 1. Read the board before anything else
 
-Read, in this order:
+```bash
+gh issue list --repo thedavidhanks/bcc-rentals-admin --state open \
+  --json number,title,labels,body
+gh issue view <N> --repo thedavidhanks/bcc-rentals-admin
+```
 
-- `## ▶ Next session — start here` — the curated priority shortlist and its standing reminders
-  (isolation/worktree, model pinning, merge protocol, integration trick). This is the priority
-  ordering; the table is roughly ranked and rows carry `(recommended)` / `(do first…)` markers.
-- `## Current state` — tip commit, current test counts, what just landed.
-- The `## Phases` row(s) for the candidate task — the full task text is the requirement source.
-- `## Blocking open questions` and `## Safety rails`.
+Board fields (`Status`, `Priority`, `Phase`, `Owner`) come from the project — see the
+`update-plan` skill's **Board reference** for the GraphQL query and the field values. Then read:
+
+- The target issue in full — its `## Background` and `## Agent prompt` are the requirement
+  source, and its citations were verified when it was filed (re-verify anyway, see Guardrails).
+- [docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) — `## Safety rails`,
+  `## Working notes for agent waves` (isolation/worktree, model pinning, merge protocol,
+  integration trick), and the `## Phase roadmap` for where the task sits.
+- [docs/LOG.md](../../../docs/LOG.md) — the last few entries, for tip commit and recent context.
 
 ### 2. Pick the target task
 
 - **User named a task** (`/next-task-prompt P11.8`, "write the prompt for the calendar work") →
-  use it. Confirm its `Depends` are all DONE; if not, say so and ask whether to proceed anyway.
-- **User didn't name one** → take the highest-priority eligible row from the shortlist. Eligible =
-  Status `TODO`/`IN PROGRESS`, every dependency DONE, no open blocking question against it.
-  - If the top candidates are genuinely close in value, or the top row is owned by `main`
+  find it with `gh issue list --search "P11.8 in:title"`. Confirm its dependencies are closed;
+  if not, say so and ask whether to proceed anyway.
+- **User didn't name one** → take the highest-`Priority` issue whose `Status` is `Ready`.
+  Eligible = open, `Status: Ready`, and every dependency named in its body (`Blocked by P8.1`)
+  is closed.
+  - If the top candidates are genuinely close in value, or the top one has `Owner: human`
     (deploy / shared-prod-DB work isn't delegable), use `AskUserQuestion` to offer 2–4 with a
     one-line why each. Otherwise just pick, and state why in your report.
-- **Bundle or split?** Follow what the plan says — it records hard-won sequencing:
+- **Bundle or split?** Follow what the issues say — they record hard-won sequencing:
   - Tasks that edit the same file or compose on one surface go in **one** work order for **one**
     agent, sequenced (e.g. P11.9 + P11.10; the P11.5→P11.6→P11.7 calendar trio).
   - Tasks with disjoint file sets may fan out to parallel worktrees in one order (the P6.3/P6.4/P6.5
     shape) — but then you must write the **file-ownership seam table** (§1 of the template).
-  - Never bundle a `graphic-designer` or `main`-owned task with a `code-writer` one.
+  - Never bundle a `graphic-designer` or `human`-owned task with a `code-writer` one.
 
 ### 3. Research before writing — this is what makes the prompt good
 
-A work order that only restates the plan row is worthless; the agent could have read the plan. The
+A work order that only restates the issue is worthless; the agent could have read the issue. The
 value is in the specifics you resolve *now* so the agent doesn't guess. Before writing, find:
 
 - **The precedent to mirror.** Nearly every task has one — an existing page + action + repository +
@@ -62,8 +77,8 @@ value is in the specifics you resolve *now* so the agent doesn't guess. Before w
   (`components/nav/nav-config.ts:22`). Verify each path exists — a wrong path sends an agent
   down a rabbit hole.
 - **Ground truth for the verification bar:** `git log --oneline -1` for the tip SHA to branch from,
-  and the current test count (`npm test`, or the count in `## Current state` if you trust it as of
-  the tip). Both go in the prompt.
+  and the current test count from a real `npm test` run. Both go in the prompt. Do not trust a
+  count quoted in an older issue or log entry — they go stale fast.
 - **Schema reality.** Confirm whether the column/table already exists (`db/schema.sql`). If the task
   needs no migration, say so explicitly — it removes an agent's biggest excuse to ask.
 - **Relevant spec sections.** Cite `docs/ADMIN_APP_SPEC.md` by **§ number** (and approximate line)
@@ -98,19 +113,27 @@ can actually violate, don't paste the whole list):
   `next build` there is an env artifact, not a defect — never copy `.env.local` into one.
 - **Model:** the agents in `~/.claude/agents/` are already pinned to full versioned IDs — launch
   with **no** `model:` override.
-- **Stop before merging to `master`** — `git merge` is human-gated, for agents too. Do not edit
-  `docs/EXECUTION_PLAN.md` / `docs/LOG.md` status; a human marks the task DONE after the merge.
+- **Stop before merging to `master`** — `git merge` is human-gated, for agents too. Do not close
+  the issue, change its board `Status`, or edit `docs/LOG.md`; a human merges, then `update-plan`
+  records it. Put `Closes #<N>` in the **branch's final commit message** so the merge closes the
+  issue automatically.
 - End with an explicit **"Do not start <adjacent task IDs>"** so the wave stays scoped.
 
 Write in the voice of the existing orders: second person, imperative, bold on the parts that bite,
 tables for ownership seams, and **judgment calls pre-decided** ("decide these, don't stall on them")
 rather than left open.
 
-### 5. Link it from the plan, then report
+### 5. Link it from the issue, then report
 
-- Append `Work order: [docs/prompts/<file>.md](./prompts/<file>.md).` to the task's **Task cell** in
-  its Phases table (the P11.1/P11.2/P11.3 rows show the convention). This is the only plan edit this
-  skill makes — **do not** change Status, and do not touch `docs/LOG.md`.
+- Comment on each issue the work order covers, so the link is discoverable from the board:
+
+  ```bash
+  gh issue comment <N> --repo thedavidhanks/bcc-rentals-admin \
+    --body "Work order: [\`docs/prompts/<file>.md\`](../blob/master/docs/prompts/<file>.md)"
+  ```
+
+  That comment is the only tracker change this skill makes — **do not** close the issue, change
+  its board `Status`, or touch `docs/LOG.md`.
 - Report in chat: which task(s) you chose and **why that one is next**, the file path, the shape you
   recommended (one agent vs. fan-out), any judgment calls you pre-decided on the user's behalf, and
   the exact launch line the user can run next (which agent, `isolation: "worktree"`, no `model:`

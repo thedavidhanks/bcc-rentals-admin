@@ -581,3 +581,62 @@ plan focused on phases + status; append new entries here as work lands.
   `worktree-agent-a775d8f9c32d3cd79` is a leftover auto-label.
   **P11 is now 5 of 10 done.** Remaining and unblocked: P11.4 (favicon), P11.5→P11.7 (calendar
   trio, sequential on one surface), P11.8 (pricing unit on `/prices`).
+- 2026-10-05 (later) — **Housekeeping pass, no task status changed.** Two plan facts had drifted and
+  were corrected in [EXECUTION_PLAN.md](./EXECUTION_PLAN.md); nothing was marked DONE because
+  nothing new landed. (1) **`master` was pushed** — `master` and `origin/master` are both
+  `8c1bd3f`, so the plan's "6 commits ahead of `origin/master` — unpushed" line (written before the
+  push) is now wrong in three places and was updated. (2) **Tip moved off the merge commit**:
+  `8c1bd3f` *"corrects container name. Adds git credentials"* sits on top of `37109c0` and touches
+  **only** `.devcontainer/devcontainer.json` (9 insertions / 3 deletions, no app code, no test
+  change) — so the verified-green state recorded for `37109c0` (474 tests / 29 files, typecheck +
+  lint clean, real `next build`) still describes trunk, but any future session comparing SHAs
+  should know the tip is no longer the merge.
+  **One plan inconsistency fixed.** P8.5 (prod smoke test) listed `Depends: P8.4`, and P8.4 is DONE
+  — by the shortlist rule ("eligible iff every dependency is DONE") that made a BLOCKED task look
+  eligible. The real gate is **P8.2**, since a smoke test needs a deployed app; `Depends` is now
+  `P8.2, P8.4`. Status stays BLOCKED.
+  **Still open as housekeeping, deliberately not done** (both are git/file mutations a human should
+  confirm): the two prune-ready branch labels
+  (`code-writer/p11-9-10-reservation-form-wave`, an ancestor of `master` so plain `-d` works, and
+  the auto-label `worktree-agent-a775d8f9c32d3cd79`) — `git worktree list` confirms **only** the
+  primary tree remains, so neither is held by a worktree — and the `.gitignore` `node_modules/`
+  trailing-slash fix, still papered over by `.git/info/exclude`.
+  **Verified, not assumed:** `git log origin/master..master` empty; `git show --stat 8c1bd3f`
+  devcontainer-only; `ls app/icon.* public/` empty, confirming **P11.4 is genuinely still TODO**
+  rather than quietly shipped.
+- 2026-10-05 — **Task tracking migrated from `docs/EXECUTION_PLAN.md` to GitHub Issues +
+  [Project #4](https://github.com/users/thedavidhanks/projects/4).** Decision drivers, in order:
+  (1) parallel `code-writer` worktrees made a single Markdown status table a conflict magnet —
+  which is why every work order in `docs/prompts/` had to tell agents *"do not edit
+  EXECUTION_PLAN.md"* and defer status to a human session; (2) P9.3 spans **two** repos and a
+  one-repo file structurally cannot track the storefront half, while the project already had both
+  repos linked; (3) status becomes derived (`Closes #N`) instead of asserted, which the plan's own
+  drift kept demonstrating. **17 open tasks filed as issues #1–#17**, titles prefixed with their
+  plan ID (`P11.5 — …`) so IDs stay greppable across work orders, commits, and `CLAUDE.md`. The
+  ~34 completed tasks were **not** backfilled as closed issues — no payoff — they are a compact
+  `ID | Task | Landed` archive in the roadmap instead.
+  **Board config:** added `Blocked` to Status; renamed Priority `P0/P1/P2` → `High/Medium/Low`
+  (it collided with the P0–P11 phase IDs); added `Phase` (P6–P11) and `Owner`
+  (`code-writer`/`test-engineer`/`graphic-designer`/`human`) single-selects. Owner is a *project
+  field*, not repo labels, to avoid inventing labels. `Auto-add to project` is enabled, so new
+  issues land on the board with empty Phase/Owner — set them at triage.
+  **Files:** `EXECUTION_PLAN.md` 521 → ~250 lines (roadmap + rails + working notes + archive, no
+  status table); `update-plan` and `next-task-prompt` skills and the work-order template rewritten
+  against the board; `CLAUDE.md` pointers updated.
+  **Three plan bugs surfaced while drafting the issues, each recorded in its issue rather than
+  silently fixed:** (a) **P9.3 cannot do what it says** — `packages/scheduler` is an npm
+  *workspaces* package, resolvable only inside this repo's install tree, so with no registry
+  publish and no git dependency the storefront has **no mechanism** to resolve `@bcc/scheduler`
+  at all; #8 scopes the admin half only and the cross-repo mechanism needs its own decision.
+  (b) **P6.8 is deeper than its row** — `emailDomainAllowed` runs on *every* `getSessionUser()`
+  call, not just at bind, and `bindInvite`'s `WHERE uid IS NULL` consumes the pending state, so
+  the bind-time carve-out the row prescribes would still lock the invitee out on their *second*
+  sign-in; the exception has to be durable per-account. (c) **P10.1/P10.2 are stale** — the org
+  pre-existed and all four projects are DONE, so the Cloud Identity registration already happened;
+  #11 is reframed as an audit of *which* account is super-admin. Also noted: P8.3's `BLOCKED (Q4)`
+  tag is stale (Q4 is superseded by P10; the real gate is P8.2).
+  **Extraction gotcha worth not repeating:** the first pass found 16 open tasks, not 17 — a
+  `grep -v DONE` over the status column dropped **P6.7**, whose cell reads
+  *"TODO — now UNBLOCKED (P6.1–P6.6 all DONE…)"*. Matching on a status word inside free prose is
+  unreliable; this is exactly the parse fragility the migration removes.
+  **No code changed** — docs, skills, and tracker only. Trunk still `8c1bd3f`, 474 tests / 29 files.

@@ -11,7 +11,13 @@ admin app is a **second writer** to the same catalog + reservation tables; the s
 is unchanged by anything here.
 
 - **Full spec:** [docs/ADMIN_APP_SPEC.md](./docs/ADMIN_APP_SPEC.md) — authoritative requirements.
-- **Build plan / progress:** [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) — phases, task owners, status. Update it as work lands.
+- **Open work:** [Project #4](https://github.com/users/thedavidhanks/projects/4) + the repo's
+  [issues](https://github.com/thedavidhanks/bcc-rentals-admin/issues) — the task tracker since
+  **2026-10-05**. Issue titles keep their plan-ID prefix (`P11.5 — …`), so plan IDs stay greppable.
+- **Roadmap / rails / archive:** [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) — phase-level
+  shape, safety rails, agent-wave working notes, and the completed-task → commit archive. **Not**
+  a status table any more.
+- **Progress log:** [docs/LOG.md](./docs/LOG.md) — dated narrative of what landed and why.
 
 ## The three things that will corrupt data if you skip them
 
@@ -159,11 +165,14 @@ npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); r
   internally, so a `model:` override on the parent does **not** rescue a broken child pin. When
   in doubt, smoke-test with a one-line "reply OK" agent before launching a long wave.
 - **`git merge` needs human approval** here (the permission guard denies it). Agents
-  build/verify on a branch and stop; a human runs the merge, then a session marks the
-  tasks DONE in the plan.
-- Keep [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) current: update task status when
-  work lands, and add a dated line to the progress log in [docs/LOG.md](./docs/LOG.md).
-  Resume from the first non-`DONE` phase.
+  build/verify on a branch and stop; a human runs the merge, then a session closes the issue.
+  Put `Closes #<N>` in the branch's final commit so the merge closes it automatically.
+- **Resume from the board, not a file:**
+  `gh issue list --repo thedavidhanks/bcc-rentals-admin --state open`. The `Status` field
+  distinguishes `Ready` from `Blocked`; each issue is a self-contained briefing. Reading the
+  project needs the `project` token scope (`gh auth refresh -s project`).
+- When work lands, add a dated line to [docs/LOG.md](./docs/LOG.md) and append the task to the
+  archive in [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md). The `update-plan` skill does both.
 
 ## Storefront reference files (per spec — repo now available, not vendored here)
 
