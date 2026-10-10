@@ -79,7 +79,7 @@ Plan task IDs (`P6.8`, `P11.5`, …) are **retained** as the prefix of every iss
 | **P8** | Deployment to Cloud Run + domain + smoke test | [#4](https://github.com/thedavidhanks/bcc-rentals-admin/issues/4) → [#5](https://github.com/thedavidhanks/bcc-rentals-admin/issues/5) → [#6](https://github.com/thedavidhanks/bcc-rentals-admin/issues/6) → [#7](https://github.com/thedavidhanks/bcc-rentals-admin/issues/7); P8.4 ✅ |
 | **P9** | Shared code consolidation (`@bcc/scheduler`) | Package exists; [#8](https://github.com/thedavidhanks/bcc-rentals-admin/issues/8) → [#9](https://github.com/thedavidhanks/bcc-rentals-admin/issues/9) open |
 | **P10** | GCP organization & project structure | Org + 4 projects ✅; [#10](https://github.com/thedavidhanks/bcc-rentals-admin/issues/10), [#11](https://github.com/thedavidhanks/bcc-rentals-admin/issues/11) open (optional) |
-| **P11** | UX polish & first-use fixes | 5 of 10 done; [#12](https://github.com/thedavidhanks/bcc-rentals-admin/issues/12), [#13](https://github.com/thedavidhanks/bcc-rentals-admin/issues/13)–[#15](https://github.com/thedavidhanks/bcc-rentals-admin/issues/15), [#16](https://github.com/thedavidhanks/bcc-rentals-admin/issues/16) open |
+| **P11** | UX polish & first-use fixes | 8 of 10 done; [#12](https://github.com/thedavidhanks/bcc-rentals-admin/issues/12), [#16](https://github.com/thedavidhanks/bcc-rentals-admin/issues/16) open |
 
 **Launch-critical path:** [#4](https://github.com/thedavidhanks/bcc-rentals-admin/issues/4)
 (deploy runbook) → [#5](https://github.com/thedavidhanks/bcc-rentals-admin/issues/5) (deploy)
@@ -243,5 +243,8 @@ Real but small; deliberately not on the board yet. File an issue if one starts t
 | P11.1 | Role-aware nav — Products marked `adminOnly`; `tests/nav-guard-parity.test.ts` pins nav ⟺ guard | `6cadba7` (merged `e629041`) |
 | P11.2 | Account menu with Logout — avatar dropdown, full keyboard/ARIA, shared `signOut()` | `22e6bbf` (merged `e629041`) |
 | P11.3 | `/profile` self-service page — name editable, role/email read-only, audited | `298df18` (merged `4cb0ec3`) |
+| P11.5 | Calendar week/month view toggle — `?view=month`, month grid = N stacked week rows reusing `placeInWeek` | `4409529` (+ tests `2f9ad14`; fast-forward) |
+| P11.6 | Calendar: one bar per reservation group — envelope window, mixed-status precedence | `cd71e75` (fast-forward) |
+| P11.7 | Calendar: filter flyout — show-cancelled toggle + per-group product filter, state in URL | `3f3acd2` (fast-forward) |
 | P11.9 | Add Reservation: one shared "When" box (Date/Start/End + recurrence) for the whole booking | `7e71c82` (merged `37109c0`) |
 | P11.10 | Add Reservation: echo submitted values on a failed submit, captured before Zod runs | `7e71c82` (merged `37109c0`) |

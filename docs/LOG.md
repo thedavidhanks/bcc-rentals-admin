@@ -640,3 +640,58 @@ plan focused on phases + status; append new entries here as work lands.
   *"TODO — now UNBLOCKED (P6.1–P6.6 all DONE…)"*. Matching on a status word inside free prose is
   unreliable; this is exactly the parse fragility the migration removes.
   **No code changed** — docs, skills, and tracker only. Trunk still `8c1bd3f`, 474 tests / 29 files.
+- 2026-10-06 — **The calendar wave landed: P11.6 ([#14](https://github.com/thedavidhanks/bcc-rentals-admin/issues/14))
+  + P11.7 ([#15](https://github.com/thedavidhanks/bcc-rentals-admin/issues/15)) + P11.5
+  ([#13](https://github.com/thedavidhanks/bcc-rentals-admin/issues/13)),** `code-writer/p11-5-6-7-calendar-wave`
+  **fast-forwarded** onto `master` (`c598cac` → `2f9ad14`; commits `cd71e75`, `3f3acd2`, `4409529`,
+  `2f9ad14`). `/calendar` was the last surface still shipping its P5.2 first draft.
+  **Done as one agent on one branch, deliberately not fanned out** — all three rewrite the same
+  ~274-line `app/calendar/page.tsx` and they compose (the month grid must render *grouped* bars; the
+  filter must match *per group*). Sequenced data model → predicate → layout so the layout is written
+  once against the final bar shape.
+  **The refactor that made it composable:** `page.tsx` went from inline load→map→sort→render to a
+  pipeline whose every stage but render is a pure function — `parseCalendarParams` → `loadCalendarData`
+  (server, lazy import) → `buildCalendarBars` → `applyCalendarFilters` → `placeInWeek` → render. New
+  pure modules `lib/calendar/bars.ts` + `lib/calendar/month.ts`; `lib/calendar/week.ts` **untouched**
+  (`placeInWeek` kept its `HasInstantWindow` signature, which a bar envelope satisfies for free).
+  Purity is the testability story: `vitest` is `environment: "node"` with `include: ["tests/**/*.test.ts"]`,
+  so `.tsx` is never collected — anything that needs a test has to live in a `.ts` module.
+  **Decisions worth not "optimizing" away later:**
+  (a) **Filtering is post-load, in pure code, on `CalendarBar[]` — never in SQL.** The filter grain is
+  per-*group*: a 3-item group passes if ≥1 item matches. Filtering rows in SQL would drop a matching
+  group's *non-matching sibling rows* and silently corrupt both its envelope and its item subtitle.
+  `listReservationsInRange` therefore gained **no** filter param and is still called with
+  `includeCancelled: true`.
+  (b) **Mixed-status precedence:** a bar is `cancelled` only if *every* row is cancelled; else
+  `confirmed` if any row is; else `block`. A group with one cancelled line is still a live booking.
+  (c) **Cancelled rows are excluded from the envelope and item list** unless the whole group is
+  cancelled — a cancelled chair order must not stretch the bar.
+  (d) **A month grid is N stacked week rows**, so `placeInWeek` handles spanning/clipping/continuation
+  arrows for free; no second placement algorithm exists. The **DB window covers the whole visible grid**
+  including adjacent-month fill days (`grid.weeks[0].startDay` → last `endDay + 1`) — narrowing it to
+  the 1st–31st silently drops bars from the first and last rows.
+  (e) `?week=` stays the anchor param in **both** views, so existing bookmarks render unchanged and
+  Prev/Next stays one code path. Month math is built on the civil-date primitives
+  (`daysFromCivil`/`civilFromDays`), **never** millisecond arithmetic, which is DST-unsafe.
+  **Verification:** `typecheck` + `lint` clean; **474 → 524 tests / 29 → 31 files**, zero deletions or
+  weakened assertions (`tests/calendar-week.test.ts` byte-identical to `master`, the proof the wave
+  extended rather than rewrote). Two independent `test-engineer` passes; the second re-derived the
+  month-boundary weekdays baked into the fixtures rather than trusting the comments, and closed a real
+  gap — `monthGridForAnchor` had **no** test for a December, January, or leap-February anchor, exactly
+  the input exercising the `daysFromCivil(y, m+1, 1)` "month 13" trick (`2f9ad14`, tests only; the
+  implementation was already correct).
+  **Gotchas:** the work order cited a stale trunk (`8c1bd3f`, one commit behind `c598cac`) — the agent
+  caught it and re-measured the baseline itself. The purity grep
+  (`grep "server-only\|@/lib/db\|next/" lib/calendar/*.ts`) is **not** literally silent: the three hits
+  are doc-comments *stating* the rule, verified not to be imports. A real `next build` cannot pass in a
+  worktree regardless of this branch — `app/layout.tsx` calls `getSessionUser()` for every route, so
+  `DATABASE_URL: Required` aborts page-data collection; **reproduced on clean `master`**, so it is
+  pre-existing and app-wide, not a regression.
+  **Follow-ups, neither filed:** the logged-out redirect drops query params
+  (`/calendar?view=month` → `/login?view=month&next=%2Fcalendar`, so deep-links lose the view);
+  and `loadCalendarData` calls `listItems()` without `activeOnly`, so deactivated products appear as
+  filter checkboxes — arguably correct, since historical reservations on retired items still need
+  filtering.
+  **Not yet verified by a human in a browser** — no agent can render this, and `vitest` collects no
+  `.tsx`; the month grid's first/last rows and the `+N more` overflow cap (3,
+  `MONTH_DAY_OVERFLOW_CAP`) are the parts only rendering can confirm.
