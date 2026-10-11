@@ -77,7 +77,7 @@ but does not touch money.
 
 ## 3. Authentication & authorization
 
-**Do not assume users have Google accounts.** Schedulers and admins are church staff and
+**Do not assume users have Google accounts.** Schedulers and admins are center staff and
 volunteers who may only have a GitHub, Facebook, Apple, or Google login. Use **Firebase
 Authentication** (a.k.a. **Google Cloud Identity Platform** — same product, Identity
 Platform is the GCP-console face of it) so multiple social identity providers are available
@@ -356,7 +356,7 @@ Hide admin-only entries for schedulers, but still enforce access on the server.
 - Schedule one or more products for chosen calendar day(s)/time(s).
 - **Multiple products in one reservation** — the form lets the scheduler add several
   line items (product + quantity + the shared or per-item date/time window) to a single
-  booking. Example: "the church has the Auditorium, 2 rental rooms, and 200 chairs for
+  booking. Example: "the center has the Auditorium, 2 rental rooms, and 200 chairs for
   Sunday operating hours." All line items are saved under one `reservation_group`.
 - **Recurring option** — a toggle that reveals recurrence controls:
   - Frequency: **daily, weekly, monthly, annually**, or **every X** (days / weeks / months).

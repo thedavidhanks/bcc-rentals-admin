@@ -12,7 +12,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:apply": "node scripts/db/apply-schema.mjs"
+    "db:apply": "node scripts/db/apply-schema.mjs",
+    "gcp:adc": "bash scripts/gcp/refresh-admin-adc.sh"
   },
   "dependencies": {
     "@bcc/scheduler": "*",

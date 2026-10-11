@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repo. Read this before touching code.
 
 ## What this is
 
-An authenticated web app for **church staff** to administer the BCC Rentals catalog and
+An authenticated web app for **Bachman Community Center staff** to administer the BCC Rentals catalog and
 calendar. It is a **separate repo** from the storefront (`bcc-rentals-frontend`) but
 **shares the storefront's Neon Postgres database** as the single source of truth. The
 admin app is a **second writer** to the same catalog + reservation tables; the storefront
@@ -136,7 +136,38 @@ npm run typecheck      # tsc --noEmit
 npm test               # vitest run
 npm run db:apply       # apply db/schema.sql to DATABASE_URL_DEV (dev branch); refuses
                        # prod unless APPLY_TO_PROD=1. Never run against prod without go-ahead.
+npm run gcp:adc        # re-mint the local Firebase Admin credential (see below)
 ```
+
+### Refreshing the local Firebase Admin credential — `npm run gcp:adc`
+
+Two ADC files live side by side in `~/.config/gcloud`, and only one of them is ours:
+
+| file | identity | used for |
+| --- | --- | --- |
+| `application_default_credentials.json` | `dh55@rice.edu` | GCP agents — **not this project; must survive** |
+| `bcc-admin-adc.json` | `gcp-admin@bachmancc.org` impersonating `firebase-adminsdk-fbsvc@bcc-admin-staging` | this app's local `GOOGLE_APPLICATION_CREDENTIALS` |
+
+When the admin credential expires, run **`npm run gcp:adc`**
+([scripts/gcp/refresh-admin-adc.sh](./scripts/gcp/refresh-admin-adc.sh)) and sign in as
+**`gcp-admin@bachmancc.org`**. Add `-- --no-launch-browser` if the devcontainer's localhost
+callback never returns; `-- --help` lists the rest.
+
+Two things the script exists to get right — reproduce them if you ever do this by hand:
+
+- **It must be an impersonated SA credential, not a plain user login.**
+  `gcloud auth application-default login` *without* `--impersonate-service-account` yields
+  `type: "authorized_user"`, which **cannot sign** — so `createSessionCookie()` fails at
+  runtime (see the credential-resolution comment in `lib/auth/session.ts`). The script
+  defaults to impersonation and refuses to install anything of the wrong `type`.
+- **The default ADC must not be collateral damage.** `gcloud` always writes the *default*
+  path, so the script runs the login inside a throwaway `CLOUDSDK_CONFIG` dir and copies the
+  result to `bcc-admin-adc.json`; the rice.edu file is never written (a sha256 guard restores
+  it if that ever stops being true). It keeps **one** rolling `bcc-admin-adc.json.bak` — don't
+  go back to hand-made `.bak2`/`.bak3` piles.
+
+Signing in as the wrong Google account fails the impersonation check *before* anything is
+installed, so a misfire leaves the working credential in place. `.env.local` is never touched.
 
 ## Safety rails
 
