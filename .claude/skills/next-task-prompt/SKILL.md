@@ -39,9 +39,12 @@ Board fields (`Status`, `Priority`, `Phase`, `Owner`) come from the project — 
 
 - The target issue in full — its `## Background` and `## Agent prompt` are the requirement
   source, and its citations were verified when it was filed (re-verify anyway, see Guardrails).
-- [docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) — `## Safety rails`,
+- [CLAUDE.md](../../../CLAUDE.md) — the safety rails, which live there and nowhere else.
+- [docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) —
   `## Working notes for agent waves` (isolation/worktree, model pinning, merge protocol,
-  integration trick), and the `## Phase roadmap` for where the task sits.
+  integration trick) and the archive of what already landed.
+- [docs/roadmap.md](../../../docs/roadmap.md) — the phase's intent, for where the task sits
+  and what it is ultimately for.
 - [docs/LOG.md](../../../docs/LOG.md) — the last few entries, for tip commit and recent context.
 
 ### 2. Pick the target task
@@ -49,9 +52,9 @@ Board fields (`Status`, `Priority`, `Phase`, `Owner`) come from the project — 
 - **User named a task** (`/next-task-prompt P11.8`, "write the prompt for the calendar work") →
   find it with `gh issue list --search "P11.8 in:title"`. Confirm its dependencies are closed;
   if not, say so and ask whether to proceed anyway.
-- **User didn't name one** → take the highest-`Priority` issue whose `Status` is `Ready`.
-  Eligible = open, `Status: Ready`, and every dependency named in its body (`Blocked by P8.1`)
-  is closed.
+- **User didn't name one** → apply the eligibility and ranking rules in
+  [project-status §5](../project-status/SKILL.md), which is where they are defined; don't
+  restate or re-derive them here.
   - If the top candidates are genuinely close in value, or the top one has `Owner: human`
     (deploy / shared-prod-DB work isn't delegable), use `AskUserQuestion` to offer 2–4 with a
     one-line why each. Otherwise just pick, and state why in your report.
@@ -113,10 +116,11 @@ can actually violate, don't paste the whole list):
   `next build` there is an env artifact, not a defect — never copy `.env.local` into one.
 - **Model:** the agents in `~/.claude/agents/` are already pinned to full versioned IDs — launch
   with **no** `model:` override.
-- **Stop before merging to `master`** — `git merge` is human-gated, for agents too. Do not close
-  the issue, change its board `Status`, or edit `docs/LOG.md`; a human merges, then `update-plan`
-  records it. Put `Closes #<N>` in the **branch's final commit message** so the merge closes the
-  issue automatically.
+- **Stop before merging to `master`** — both `git merge` and `gh pr merge` are human-gated,
+  for agents too. Build and verify on a branch, then stop. Do not close the issue, change its
+  board `Status`, or edit `docs/LOG.md` / `docs/roadmap.md`. A human reviews, the
+  `open-pull-request` skill opens the pull request with `Closes #<N>` in its body, a human
+  merges, then `update-plan` records it.
 - End with an explicit **"Do not start <adjacent task IDs>"** so the wave stays scoped.
 
 Write in the voice of the existing orders: second person, imperative, bold on the parts that bite,

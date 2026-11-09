@@ -4,7 +4,7 @@
     "CLAUDE_CODE_USE_VERTEX": "1",
     "ANTHROPIC_VERTEX_PROJECT_ID": "rice-tti-pocs",
     "CLOUD_ML_REGION": "global",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-8"
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5"
   },
   "permissions": {
     "allow": [
@@ -23,9 +23,33 @@
       "Bash(grep:*)",
       "Bash(npm run typecheck:*)",
       "Bash(npm run test:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh issue close:*)",
+      "Bash(gh issue develop:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr status:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh project list:*)",
+      "Bash(gh project view:*)",
+      "Bash(gh project field-list:*)",
+      "Bash(gh project item-list:*)",
+      "Bash(gh project item-add:*)",
+      "Bash(gh project item-edit:*)",
+      "Bash(gh label list:*)",
       "mcp__duckduckgo__web-search"
     ],
-    "deny": ["WebSearch", "Bash(git merge:*)"]
+    "deny": ["WebSearch", "Bash(git merge:*)", "Bash(gh pr merge:*)"]
   },
   "model": "opus"
 }

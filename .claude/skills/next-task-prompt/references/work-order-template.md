@@ -31,8 +31,10 @@ Before assigning anything, you — and **every** subagent that touches code — 
   versioned model IDs — launch them with **no** `model:` override).
 - Issue **#<N>** (`<IDs>`) on the [board](https://github.com/users/thedavidhanks/projects/4) —
   the requirement source: its `## Background` citations and `## Acceptance criteria`.
-- [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md) — `## Safety rails` and
-  `## Working notes for agent waves` (isolation, worktree setup, merge protocol).
+- [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md) — `## Working notes for agent waves`
+  (isolation, worktree setup, merge protocol). The safety rails live in
+  [CLAUDE.md](../../CLAUDE.md), not here.
+- [docs/roadmap.md](../roadmap.md) — the phase's intent, for what this task is ultimately for.
 - [docs/ADMIN_APP_SPEC.md](../ADMIN_APP_SPEC.md) — **§<n>** (<what's there>), **§<n>** (<…>).
 - The precedent implementation to mirror: [<path>](../../<path>) + [<path>](../../<path>) +
   [tests/<name>.test.ts](../../tests/<name>.test.ts) (<task ID that shipped it>). Same shapes:
@@ -164,16 +166,16 @@ Per branch and again on the integration branch:
 1. Execute per §1.
 2. When green (verified by `test-engineer`), assemble the work on **one** branch and verify the
    combined tree: `npm run typecheck`, `npm run lint`, `npm test`.
-3. **Stop before merging to `master`.** `git merge` to `master` is human-gated here — the
-   permission guard denies it for agents too. With strictly disjoint file ownership, integrate
-   with `git checkout <branch> -- <paths>` instead of a merge, then diff each branch's owned paths
-   against the integration branch to prove nothing was missed.
+3. **Stop before merging to `master`.** Merging is human-gated here — the permission guard
+   denies both `git merge` and `gh pr merge` for agents too. With strictly disjoint file
+   ownership, integrate with `git checkout <branch> -- <paths>` instead of a merge, then diff
+   each branch's owned paths against the integration branch to prove nothing was missed.
 4. **Report:** branch name(s), test counts (<N> → ?), the §4 decisions you took, the exact audit
    `action` string(s) used, confirmation that each §3 item has a named test behind it, and
    anything you changed in existing tests (and why).
-5. Do **not** close issue #<N>, change its board status, or edit [docs/LOG.md](../LOG.md) — a
-   human merges, then records it. Put `Closes #<N>` in your branch's final commit message so
-   the merge closes the issue automatically.
+5. Do **not** close issue #<N>, change its board status, or edit [docs/LOG.md](../LOG.md) or
+   [docs/roadmap.md](../roadmap.md). Hand the branch back: the `open-pull-request` skill opens
+   the pull request with `Closes #<N>` in its body, a human merges, and `update-plan` records it.
 
 **Do not start <adjacent task IDs>.** <One line on why they're a separate wave.>
 ```

@@ -13,20 +13,21 @@ the next person to re-derive the context. Every issue carries its own briefing.
 public). If the bug is in the storefront, file it there with `--repo`; if it
 spans both, file in the repo that must change and cross-link.
 
-## Issue vs. execution plan — pick the right home
+## Issue vs. roadmap — pick the right home
 
-This project tracks its own roadmap in
-[docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md), with work orders in
-[docs/prompts/](../../../docs/prompts/).
+Since 2026-10-05 **every open task is an issue**; there is no Markdown task
+list. [docs/roadmap.md](../../../docs/roadmap.md) holds only each phase's
+*intent*, and work orders live in [docs/prompts/](../../../docs/prompts/).
 
-- **Already a plan task (`P11.4`, `P9.3`, …)** → it does not need an issue. Use the
-  `next-task-prompt` skill to write the work order, and `update-plan` to move its
-  status. Only file an issue if the user wants it externally visible or
-  assignable on GitHub.
-- **Not in the plan** — a bug found in shipped code, a drive-by finding, an idea
-  from outside the roadmap → **this skill**. Mention the nearest plan phase in
-  Background so the two stay reconciled, and say whether the plan should gain a
-  row for it.
+- **Already an open issue** → don't file a second one. Use `next-task-prompt`
+  to write its work order, and `update-plan` to record it once it lands.
+- **Anything not yet an issue** — a bug in shipped code, a drive-by finding, an
+  idea from outside the current phases → **this skill**. Give it the phase it
+  belongs to (`Phase` field on the board) and prefix the title with a plan ID if
+  it extends an existing phase (`P11.11 — …`). If it belongs to no phase, say so
+  and note whether [docs/roadmap.md](../../../docs/roadmap.md) should gain or
+  rescope one — that edit is [update-roadmap](../update-roadmap/SKILL.md)'s, not
+  this skill's.
 
 Always cite the plan task ID when one is related (`P6.7`, `P8.3`), and cite spec
 sections as `§N` referencing
@@ -184,8 +185,8 @@ is a regression or long-standing. No jargon that is not unpacked.
 
 The technical detail: how the relevant code works today, with `file.ext:line`
 citations. Include the real evidence — a failing test, command output, a table
-of observed vs. expected values. Cite the spec section (`§8`, `§6`) and the
-execution-plan task (`P6.2`) the behaviour comes from. State what is NOT in the
+of observed vs. expected values. Cite the spec section (`§8`, `§6`) and the plan
+task ID (`P6.2`) the behaviour comes from. State what is NOT in the
 repo if that matters ("the sign-in provider list lives in the Firebase console,
 so a commit alone cannot fix it"). Cross-reference related issues with `#N`.
 
@@ -224,8 +225,8 @@ so a commit alone cannot fix it"). Cross-reference related issues with `#N`.
 > - Import shared scheduler/product types from `@bcc/scheduler`; don't duplicate.
 > - **No DDL against the shared DB and no deploys without human approval** — an
 >   agent may write `db/schema.sql` and the apply script; a human runs it, dev
->   branch first. `git merge` also needs human approval: build and verify on a
->   branch, then stop.
+>   branch first. Merging is human-gated too (`git merge` and `gh pr merge` are
+>   both denied to agents): build and verify on a branch, then stop.
 >
 > …plus any tradeoff that must be surfaced rather than silently accepted.
 >
@@ -244,8 +245,10 @@ so a commit alone cannot fix it"). Cross-reference related issues with `#N`.
       cancel logic"
 - [ ] Include the test requirement as its own box, naming the file
 - [ ] Include `npm run lint` + `npm run typecheck` clean as its own box
-- [ ] Include any docs update the change implies — `docs/EXECUTION_PLAN.md`
-      status, a dated line in `docs/LOG.md`, `CLAUDE.md` if a convention changes
+- [ ] Include any docs update the change implies — a dated line in
+      `docs/LOG.md` and an archive row in `docs/EXECUTION_PLAN.md` (both written
+      by `update-plan` after the merge), `docs/roadmap.md` only if a phase's
+      intent changes, `CLAUDE.md` if a convention changes
 ```
 
 ### Examples of failure and success

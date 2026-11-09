@@ -14,9 +14,11 @@ is unchanged by anything here.
 - **Open work:** [Project #4](https://github.com/users/thedavidhanks/projects/4) + the repo's
   [issues](https://github.com/thedavidhanks/bcc-rentals-admin/issues) — the task tracker since
   **2026-10-05**. Issue titles keep their plan-ID prefix (`P11.5 — …`), so plan IDs stay greppable.
-- **Roadmap / rails / archive:** [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) — phase-level
-  shape, safety rails, agent-wave working notes, and the completed-task → commit archive. **Not**
-  a status table any more.
+- **Roadmap:** [docs/roadmap.md](./docs/roadmap.md) — what each phase is *for*, in plain
+  English, plus "Where the system is today". Owned by the `update-roadmap` skill. **Not** a
+  status table and **not** an archive.
+- **Archive / agent notes:** [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md) — the
+  completed-task → commit archive, agent-wave working notes, open questions, unfiled findings.
 - **Progress log:** [docs/LOG.md](./docs/LOG.md) — dated narrative of what landed and why.
 
 ## The three things that will corrupt data if you skip them
@@ -181,7 +183,7 @@ installed, so a misfire leaves the working credential in place. `.env.local` is 
 ## Working style
 
 - **Delegate to agents by default.** Custom agents available: `code-writer`
-  (branch → test-engineer → merge), `test-engineer`, `code-improvement-advisor`,
+  (branch → test-engineer → stop), `test-engineer`, `code-improvement-advisor`,
   `graphic-designer`. Reserve `main` for decisions, wiring, and anything touching the
   shared production DB or deployment.
 - **Agent model:** use **full versioned model IDs** in agent frontmatter — bare aliases 404 on
@@ -195,15 +197,30 @@ installed, so a misfire leaves the working credential in place. `.env.local` is 
   a pin needs a session restart before it takes effect; and `code-writer` spawns `test-engineer`
   internally, so a `model:` override on the parent does **not** rescue a broken child pin. When
   in doubt, smoke-test with a one-line "reply OK" agent before launching a long wave.
-- **`git merge` needs human approval** here (the permission guard denies it). Agents
-  build/verify on a branch and stop; a human runs the merge, then a session closes the issue.
-  Put `Closes #<N>` in the branch's final commit so the merge closes it automatically.
+- **Branches reach `master` through a pull request, merged by a human.** The permission guard
+  denies both `git merge` and `gh pr merge` to agents. Agents build/verify on a branch and
+  stop; the `open-pull-request` skill opens the PR with `Closes #<N>` in its body (so the merge
+  closes the issue and flips the board to `Done`); a human reads the diff and merges.
 - **Resume from the board, not a file:**
   `gh issue list --repo thedavidhanks/bcc-rentals-admin --state open`. The `Status` field
   distinguishes `Ready` from `Blocked`; each issue is a self-contained briefing. Reading the
   project needs the `project` token scope (`gh auth refresh -s project`).
-- When work lands, add a dated line to [docs/LOG.md](./docs/LOG.md) and append the task to the
-  archive in [docs/EXECUTION_PLAN.md](./docs/EXECUTION_PLAN.md). The `update-plan` skill does both.
+
+### Skills — one job each, no overlap
+
+| Want to… | Skill | Writes |
+| --- | --- | --- |
+| know where the project stands / what's next | `project-status` | nothing (read-only) |
+| file a bug, finding, or new task | `create-github-issue` | a GitHub issue |
+| turn an issue into an agent work order | `next-task-prompt` | `docs/prompts/*.md` |
+| ship a finished branch | `open-pull-request` | a PR; calls `update-roadmap` |
+| sync the phase plan with GitHub | `update-roadmap` | `docs/roadmap.md` only |
+| record work that just merged | `update-plan` | the issue, the board, `docs/LOG.md`, the archive |
+
+`project-status` is the single definition of "what's next" — `next-task-prompt` and
+`update-plan` defer to its §5 rather than re-deriving it. `update-roadmap` is the only writer
+of `docs/roadmap.md`. `update-plan` is the only writer of `docs/LOG.md` and the archive, and it
+runs **after** a human merge, never before.
 
 ## Storefront reference files (per spec — repo now available, not vendored here)
 

@@ -1,21 +1,22 @@
-# BCC Rentals Admin — Roadmap
+# BCC Rentals Admin — archive & agent working notes
 
-> **Task tracking moved to GitHub Issues on 2026-10-05.**
-> Open work lives on the **[BCC Rentals project board](https://github.com/users/thedavidhanks/projects/4)**,
-> not in this file. This file is now the **phase-level roadmap**, the **non-negotiable
-> rails**, and the **archive** of completed work.
+> **Task tracking moved to GitHub Issues on 2026-10-05**, and the phase-level roadmap
+> moved to **[roadmap.md](./roadmap.md)** on 2026-11-08.
+> This file is now the **archive** of completed work plus the **operational lessons**
+> from running agent waves. It is not a status table and not a roadmap.
 
 The authoritative requirements live in [ADMIN_APP_SPEC.md](./ADMIN_APP_SPEC.md); the
-non-negotiable conventions live in **[CLAUDE.md](../CLAUDE.md)** — read it first. The dated
-narrative of what landed and when is in **[LOG.md](./LOG.md)**.
+non-negotiable conventions and safety rails live in **[CLAUDE.md](../CLAUDE.md)** — read it
+first. The dated narrative of what landed and when is in **[LOG.md](./LOG.md)**.
 
 ## Where things live now
 
 | What | Where |
 | --- | --- |
 | Open tasks, status, priority, dependencies | [Project #4](https://github.com/users/thedavidhanks/projects/4) + [issues](https://github.com/thedavidhanks/bcc-rentals-admin/issues) |
+| Phase intent — what each phase is for | [roadmap.md](./roadmap.md) |
 | Requirements (`§N` references) | [ADMIN_APP_SPEC.md](./ADMIN_APP_SPEC.md) |
-| Conventions + safety rails | [CLAUDE.md](../CLAUDE.md) and the rails below |
+| Conventions + safety rails | [CLAUDE.md](../CLAUDE.md) |
 | What landed, dated | [LOG.md](./LOG.md) |
 | Completed task → commit mapping | the [archive](#archive--completed-work) below |
 | Agent work orders | [docs/prompts/](./prompts/) |
@@ -34,59 +35,22 @@ Plan task IDs (`P6.8`, `P11.5`, …) are **retained** as the prefix of every iss
 2. Each issue is a **self-contained briefing** — summary, background with `file:line`
    citations, an agent prompt (or a human `## Brief` for deploy/DDL/decision tasks), and
    testable acceptance criteria. You should not need to re-derive context from this file.
-3. **Status is derived, not asserted.** Put `Closes #N` in the PR or merge commit; do not
+3. **Status is derived, not asserted.** Put `Closes #N` in the pull request body; do not
    hand-maintain a status column. Move the board's Status field only when a task starts
    or becomes blocked.
-4. Agents build and verify **on a branch, then stop** — `git merge` needs human approval
-   here. Append a dated line to [LOG.md](./LOG.md) when work lands.
+4. Agents build and verify **on a branch, then stop**. A branch reaches `master` through a
+   pull request opened by the `open-pull-request` skill and **merged by a human** — both
+   `git merge` and `gh pr merge` are denied to agents. Append a dated line to
+   [LOG.md](./LOG.md) when work lands.
 5. Project fields: **Status** · **Priority** (High/Medium/Low) · **Phase** (P6–P11) ·
    **Owner** (`code-writer`, `test-engineer`, `graphic-designer`, `human`). The Owner field
    is the recommended agent; `human` means decisions, DDL, deploys, and cross-system checks.
 
----
-
-## Safety rails (non-negotiable)
-
-- The admin app is a **second writer to the storefront's production tables.** Every
-  reservation write MUST use the per-item advisory-lock + capacity-recheck pattern in
-  spec §8, inside one transaction, locks acquired in stable slug order.
-- **No agent runs DDL against the shared DB or deploys** without explicit human
-  approval in-session. Agents may _write_ `schema.sql` and the apply script; a human
-  (or `main` with go-ahead) _runs_ it, against the **dev branch** first.
-- All new schema is idempotent (`IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`).
-- Money = integer cents. Time = minutes since local midnight, `America/New_York`.
-  Reservation instants = `timestamptz`. No floats, no stored UTC offsets.
-- `.env.local` holds **live production secrets** — never commit it, never echo its
-  contents into logs, PRs, issues, or agent prompts.
-- The repo and its issues are **public**. No secrets, no real customer/staff data, no
-  exploit recipes for unpatched weaknesses — see the
-  [create-github-issue skill](../.claude/skills/create-github-issue/SKILL.md).
-
----
-
-## Phase roadmap
-
-| Phase | Scope | State |
-| --- | --- | --- |
-| **P0** | Repo & tooling foundation | ✅ Complete |
-| **P1** | Data layer & config (`lib/db.ts`, `lib/env.ts`, `db/schema.sql`) | ✅ Complete |
-| **P2** | Reservation engine — race-safe core (spec §8) | ✅ Complete |
-| **P3** | Typed repositories & `admin_audit_log` writer | ✅ Complete |
-| **P4** | Auth & authorization (Firebase → `app_users` → role guards) | ✅ Complete |
-| **P5** | UI: app shell, role-aware nav, weekly calendar | ✅ Complete |
-| **P6** | UI: reservations, products, prices, categories, users | Screens complete; [#17](https://github.com/thedavidhanks/bcc-rentals-admin/issues/17) full-flow tests, [#1](https://github.com/thedavidhanks/bcc-rentals-admin/issues/1) invite-domain exception, [#2](https://github.com/thedavidhanks/bcc-rentals-admin/issues/2) invite email open |
-| **P7** | Cross-system verification against the live storefront | [#3](https://github.com/thedavidhanks/bcc-rentals-admin/issues/3) open |
-| **P8** | Deployment to Cloud Run + domain + smoke test | [#4](https://github.com/thedavidhanks/bcc-rentals-admin/issues/4) → [#5](https://github.com/thedavidhanks/bcc-rentals-admin/issues/5) → [#6](https://github.com/thedavidhanks/bcc-rentals-admin/issues/6) → [#7](https://github.com/thedavidhanks/bcc-rentals-admin/issues/7); P8.4 ✅ |
-| **P9** | Shared code consolidation (`@bcc/scheduler`) | Package exists; [#8](https://github.com/thedavidhanks/bcc-rentals-admin/issues/8) → [#9](https://github.com/thedavidhanks/bcc-rentals-admin/issues/9) open |
-| **P10** | GCP organization & project structure | Org + 4 projects ✅; [#10](https://github.com/thedavidhanks/bcc-rentals-admin/issues/10), [#11](https://github.com/thedavidhanks/bcc-rentals-admin/issues/11) open (optional) |
-| **P11** | UX polish & first-use fixes | 8 of 10 done; [#12](https://github.com/thedavidhanks/bcc-rentals-admin/issues/12), [#16](https://github.com/thedavidhanks/bcc-rentals-admin/issues/16) open |
-
-**Launch-critical path:** [#4](https://github.com/thedavidhanks/bcc-rentals-admin/issues/4)
-(deploy runbook) → [#5](https://github.com/thedavidhanks/bcc-rentals-admin/issues/5) (deploy)
-→ [#6](https://github.com/thedavidhanks/bcc-rentals-admin/issues/6) (domain) →
-[#7](https://github.com/thedavidhanks/bcc-rentals-admin/issues/7) (smoke test), plus
-[#3](https://github.com/thedavidhanks/bcc-rentals-admin/issues/3) (cross-system check, needs
-no deploy). Everything else is polish or tech debt.
+The **safety rails** that used to be restated here now live in exactly one place,
+[CLAUDE.md](../CLAUDE.md) — race-safe reservation writes, no agent DDL or deploys, integer
+cents and Eastern minutes, `.env.local` secrecy, and the public-repo rules. The
+**phase roadmap** and the launch-critical path moved to [roadmap.md](./roadmap.md);
+per-phase status is on [Project #4](https://github.com/users/thedavidhanks/projects/4).
 
 ---
 
