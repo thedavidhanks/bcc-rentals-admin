@@ -100,7 +100,9 @@ systems.
 
 Put the app on Cloud Run at `admin.bachmancc.org` so staff can use it
 from any browser instead of a developer's laptop, and smoke-test it in
-production. *Gated on* confirming DNS control of the domain.
+production. Shipping becomes automatic and reviewed: tests run on every
+proposed change, and only a reviewed change that passed them can become
+`master` and deploy. *Gated on* confirming DNS control of the domain.
 
 ### P9 — Shared code
 
