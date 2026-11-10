@@ -121,6 +121,11 @@ not work that has landed. That changes what you may claim:
   date), on the understanding that the merge follows the same day. If
   the developer merges much later, the date is close enough; a wrong
   SHA is not.
+- **A rebase rewrites every SHA you just cited.** If the branch is
+  rebased after the entry is written — `master` moved and the pull
+  request asks for it — re-read `git log --oneline master..HEAD` and
+  re-point the SHAs, then amend the docs commit. Merging is human-only
+  here, so a long-lived branch is normal and this will happen.
 - **Never claim a schema apply or a deploy happened.** Agents never run
   DDL and never deploy. If the branch changes `db/schema.sql` or
   deployment config, the log says the merge does **not** apply it and
