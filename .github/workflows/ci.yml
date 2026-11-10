@@ -210,14 +210,28 @@ jobs:
       # --allow-unauthenticated is correct here: Cloud Run IAM gates Google
       # service accounts, not Firebase-authenticated staff. The APP is the gate —
       # middleware checks the session cookie and the app_users lookup authorizes
-      # (spec §10). The allUsers invoker binding is also exempt from the org's
-      # domain-restricted-sharing constraint.
+      # (spec §10). But the allUsers invoker binding it asks for is REJECTED by
+      # this org's `constraints/iam.allowedPolicyMemberDomains` (domain-restricted
+      # sharing) unless a human first applies a project-scoped org-policy
+      # exception on bcc-admin-prod — see docs/DEPLOY_CLOUD_RUN.md. gcloud
+      # downgrades that rejection to a warning and still exits 0 (plan P8.7,
+      # issue #21), which is why the two assertion steps below exist.
+      #
+      # On "Completed with warnings": the warning is surfaced as a GitHub
+      # annotation and in the job summary rather than hard-failing the step.
+      # A warning is not reliably fatal (gcloud warns about plenty of benign
+      # things), so the REAL gate is the reachability assertion below — it tests
+      # the end state instead of parsing prose. A genuine non-zero gcloud exit
+      # still fails this step: `pipefail` makes the exit code survive the `tee`.
       - name: Deploy to Cloud Run
         env:
           IMAGE: ${{ steps.image.outputs.ref }}
           RUNTIME_ENV_VARS: ${{ steps.runtime_env.outputs.vars }}
         run: |
           set -euo pipefail
+          log="$(mktemp)"
+          # tee keeps the output streaming into the live job log while we keep a
+          # copy to inspect afterwards.
           gcloud run deploy "$SERVICE_NAME" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
@@ -229,12 +243,80 @@ jobs:
             --service-account "$RUNTIME_SERVICE_ACCOUNT" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
             --set-env-vars "$RUNTIME_ENV_VARS" \
-            --quiet
+            --quiet 2>&1 | tee "$log"
 
-      - name: Show service URL
+          if grep -qi 'completed with warnings' "$log"; then
+            # Flatten to one line, drop '::' so gcloud's own output can never
+            # forge a workflow command, and cap the length. Annotation text is
+            # data, not code.
+            warning="$(sed -n '/[Cc]ompleted with [Ww]arnings/,$p' "$log" \
+              | tr '\n\r' '  ' | tr -s ' ' | sed 's/::/ - /g' | cut -c1-800)"
+            echo "::warning title=gcloud run deploy completed with warnings::${warning}"
+            {
+              echo "### :warning: \`gcloud run deploy\` completed with warnings"
+              echo
+              echo "The deploy exited 0 anyway. The reachability assertion below is what decides"
+              echo "whether this job passes."
+              echo
+              echo '```text'
+              sed -n '/[Cc]ompleted with [Ww]arnings/,$p' "$log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Read the URL rather than constructing it: both the deterministic
+      # (<service>-<project-number>.<region>.run.app) and the legacy
+      # (<service>-<hash>-ue.a.run.app) forms resolve for this service.
+      - name: Resolve service URL
+        id: service
         run: |
           set -euo pipefail
-          gcloud run services describe "$SERVICE_NAME" \
+          url="$(gcloud run services describe "$SERVICE_NAME" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
-            --format 'value(status.url)'
+            --format 'value(status.url)')"
+          if [ -z "$url" ]; then
+            echo "::error title=No service URL::gcloud run services describe returned no status.url for ${SERVICE_NAME}."
+            exit 1
+          fi
+          echo "Service URL: ${url}"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "- Service URL: ${url}" >> "$GITHUB_STEP_SUMMARY"
+
+      # Two checks on purpose, and they answer different questions:
+      #   * this one names the exact CAUSE — in the broken run of 2026-11-10 the
+      #     policy came back as literally {"etag": "ACAB"}, no bindings at all,
+      #     which points straight at the rejected allUsers binding;
+      #   * the HTTP check below proves the END STATE a real visitor sees, and
+      #     would also catch a crash-looping revision, a bad port or a broken
+      #     route that an intact IAM policy says nothing about.
+      # Neither subsumes the other, so both run.
+      - name: Assert public invoker binding exists
+        run: |
+          set -euo pipefail
+          policy="$(gcloud run services get-iam-policy "$SERVICE_NAME" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format json)"
+          if printf '%s' "$policy" | jq -e '
+                [ (.bindings // [])[]
+                  | select(.role == "roles/run.invoker")
+                  | (.members // [])[]
+                  | select(. == "allUsers" or . == "allAuthenticatedUsers")
+                ] | length > 0' > /dev/null; then
+            echo "OK: ${SERVICE_NAME} grants roles/run.invoker to anonymous callers."
+          else
+            echo "::error title=Cloud Run service has no public invoker binding::${SERVICE_NAME} in ${GCP_PROJECT_ID}/${GCP_REGION} does not grant roles/run.invoker to allUsers, so every visitor gets HTTP 403. gcloud run deploy --allow-unauthenticated tried and was refused by the bachmancc.org org policy constraints/iam.allowedPolicyMemberDomains. A human must apply a project-scoped org-policy exception on ${GCP_PROJECT_ID} and then add the allUsers/roles/run.invoker binding. See docs/DEPLOY_CLOUD_RUN.md."
+            echo "Current roles on the service:"
+            printf '%s' "$policy" | jq -r '(.bindings // []) | if length == 0 then "  (none)" else .[] | "  \(.role): \((.members // []) | join(", "))" end'
+            exit 1
+          fi
+
+      # The post-condition that actually matters: an anonymous GET gets a 2xx or
+      # 3xx (the app redirects unauthenticated callers to /login). Retries cover
+      # a scale-to-zero cold start; a 403 fails immediately. Kept in a script so
+      # it can be run by hand against any URL without a deploy.
+      - name: Assert the service is reachable
+        env:
+          SERVICE_URL: ${{ steps.service.outputs.url }}
+        run: ./scripts/ci/assert-service-reachable.sh "$SERVICE_URL"

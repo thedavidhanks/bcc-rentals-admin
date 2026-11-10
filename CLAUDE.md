@@ -102,8 +102,21 @@ holds the `DATABASE_URL` secret with `run-runtime` granted `secretAccessor` on i
   (`dphanks@gmail.com`) was **not** migrated: the org enforces **domain-restricted sharing**
   (`iam.allowedPolicyMemberDomains`) by default, which blocks moving externally-owned projects
   in or adding non-`@bachmancc.org` identities to any org resource.
-- **Deploy gotcha:** keep every IAM member `@bachmancc.org`. `--allow-unauthenticated` on Cloud
-  Run still works (it's an `allUsers` invoker binding, exempt from the member-domain constraint).
+- **Deploy gotcha:** keep every IAM *identity* member `@bachmancc.org` — and
+  `--allow-unauthenticated` is **not** exempt. **Corrected 2026-11-10**, after the first
+  production deploy proved otherwise: the `allUsers` invoker binding is *rejected* by
+  `iam.allowedPolicyMemberDomains` with `FAILED_PRECONDITION: One or more users named in the
+  policy do not belong to a permitted customer`. Worse, `gcloud run deploy` downgrades that to a
+  **warning** and still exits `0`, so a deploy reports success while the service returns `403`
+  to every caller — see
+  [Issue #21](https://github.com/thedavidhanks/bcc-rentals-admin/issues/21). **Prerequisite for
+  the first public deploy:** a **human** holding org-level `roles/orgpolicy.policyAdmin` applies
+  a **project-scoped exception** to that constraint on `bcc-admin-prod`, then re-runs the
+  `allUsers`/`run.invoker` binding — commands and verification in
+  [docs/DEPLOY_CLOUD_RUN.md §3.3](./docs/DEPLOY_CLOUD_RUN.md) (§5.2 is the same remedy for the
+  WIF binding). Note `roles/resourcemanager.organizationAdmin` is **not** sufficient: it carries
+  only `orgpolicy.policy.get` / `policies.list`. CI asserts the service is reachable after every
+  deploy (P8.7), so this failure mode can no longer ship green.
 
 ## Schema
 
