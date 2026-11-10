@@ -35,7 +35,7 @@ gh issue view <N> --repo thedavidhanks/bcc-rentals-admin
 ```
 
 Board fields (`Status`, `Priority`, `Phase`, `Owner`) come from the project — see the
-`update-plan` skill's **Board reference** for the GraphQL query and the field values. Then read:
+`update-roadmap` skill's **Board reference** for the GraphQL query and the field values. Then read:
 
 - The target issue in full — its `## Background` and `## Agent prompt` are the requirement
   source, and its citations were verified when it was filed (re-verify anyway, see Guardrails).
@@ -118,9 +118,9 @@ can actually violate, don't paste the whole list):
   with **no** `model:` override.
 - **Stop before merging to `master`** — both `git merge` and `gh pr merge` are human-gated,
   for agents too. Build and verify on a branch, then stop. Do not close the issue, change its
-  board `Status`, or edit `docs/LOG.md` / `docs/roadmap.md`. A human reviews, the
-  `open-pull-request` skill opens the pull request with `Closes #<N>` in its body, a human
-  merges, then `update-plan` records it.
+  board `Status`, or edit `docs/LOG.md` / `docs/EXECUTION_PLAN.md` / `docs/roadmap.md`. A human
+  reviews, the `open-pull-request` skill opens the pull request — calling `update-roadmap` to
+  commit those documents on the branch first — with `Closes #<N>` in its body, and a human merges.
 - End with an explicit **"Do not start <adjacent task IDs>"** so the wave stays scoped.
 
 Write in the voice of the existing orders: second person, imperative, bold on the parts that bite,
@@ -152,7 +152,7 @@ rather than left open.
   materially changes the work.
 - **Don't implement the task** or launch the agents — writing the prompt is the whole deliverable
   unless the user asks for more.
-- **Don't mark anything DONE** — that's the `update-plan` skill, after a human merge.
+- **Don't mark anything DONE** — the pull request's `Closes #<N>` line does that on merge.
 - **No secrets.** Never quote `.env.local`, DB URLs, or credentials into a prompt file; these files
   are committed.
 - If a task turns out to be **blocked** or to need DDL/deploy/human action, write that finding up

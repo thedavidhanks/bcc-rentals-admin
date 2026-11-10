@@ -695,3 +695,42 @@ plan focused on phases + status; append new entries here as work lands.
   **Not yet verified by a human in a browser** — no agent can render this, and `vitest` collects no
   `.tsx`; the month grid's first/last rows and the `+N more` overflow cap (3,
   `MONTH_DAY_OVERFLOW_CAP`) are the parts only rendering can confirm.
+- 2026-11-10 — **`update-plan` merged into `update-roadmap`; the plan documents are now written
+  before the merge, not after** (`67b8777`, branch `skills/merge-update-plan-into-update-roadmap`;
+  **not board-tracked** — agent tooling, so the pull request carries no `Closes` line). The two
+  skills were writing two sets of documents at two moments, which to the developer read as a
+  distinction without a difference ("I don't need a plan and a roadmap"). One skill now owns all
+  three: the dated entry here, the archive row in [EXECUTION_PLAN.md](./EXECUTION_PLAN.md), and
+  [roadmap.md](./roadmap.md). It commits them **on the branch**, so documents and code merge
+  together and nothing is left to record afterwards — `Closes #N` already closes the issue and
+  flips the board to `Done`.
+  **Decisions worth protecting from a later "cleanup":**
+  (a) **The three-command gate now guards the roadmap step only.** The log entry and archive row
+  are written on every substantive branch regardless. Widening the gate to cover all three would
+  make most branches record nothing, which is the whole value lost.
+  (b) **`roadmap.md` still carries no counts, SHAs, or status** — that is precisely *why* the gate
+  can be three commands. A test count on that page would invalidate it on every ordinary merge.
+  Counts belong here or in `project-status`.
+  (c) **Pre-merge changes what may be claimed**, so a new §2 forbids citing a merge SHA that does
+  not exist (branch SHAs only — most waves land by fast-forward anyway) and forbids claiming a
+  schema apply or deploy happened.
+  (d) **Board field hygiene was deliberately *not* carried over.** `update-plan` flipped dependents
+  `Blocked`→`Ready`; that cannot honestly happen before the merge, so the skill reports what to
+  flip and writes nothing to GitHub. Don't "restore" it — it would be lying about state.
+  (e) **The hook asks, it does not deny,** and its marker is "the branch commits one of the three
+  documents" rather than a re-run of the gate. Re-running the gate would dead-lock a branch that
+  legitimately needs no roadmap change; the docs-commit marker cannot, because the skill always
+  writes at least a log entry.
+  **Verification:** `lint` + `typecheck` clean; **524 tests / 31 files, unchanged from `master`** —
+  the branch touches no application code, so coverage was neither added nor lost. The hook was
+  exercised across five cases: unrelated command, on-`master`, `gh pr list` (all pass silently),
+  missing-docs (returns `ask` and names the auth/page/deploy files it found), docs-present (passes).
+  **Gotcha:** the first hook test wrapped itself in `git stash -u`, which stashed the then-untracked
+  hook script along with everything else — the test harness reported `No such file or directory`
+  rather than a hook failure. Re-run without stashing, committing only a named throwaway file.
+  **Housekeeping, not done:** `.claude/worktrees/agent-a65ccadd22806a205/` is still sitting
+  untracked in the working tree from an earlier agent wave. Two `update-plan` references survive on
+  purpose — [LOG.md](./LOG.md) line 624 and the archived P6.8 work order — because both are history
+  and history is not rewritten.
+  **Takes effect next session:** `.claude/settings.json` is read at startup, so the hook is inert in
+  the session that wrote it.

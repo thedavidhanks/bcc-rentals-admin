@@ -20,7 +20,7 @@ list. [docs/roadmap.md](../../../docs/roadmap.md) holds only each phase's
 *intent*, and work orders live in [docs/prompts/](../../../docs/prompts/).
 
 - **Already an open issue** → don't file a second one. Use `next-task-prompt`
-  to write its work order, and `update-plan` to record it once it lands.
+  to write its work order; `open-pull-request` records it when the branch ships.
 - **Anything not yet an issue** — a bug in shipped code, a drive-by finding, an
   idea from outside the current phases → **this skill**. Give it the phase it
   belongs to (`Phase` field on the board) and prefix the title with a plan ID if
@@ -247,8 +247,8 @@ so a commit alone cannot fix it"). Cross-reference related issues with `#N`.
 - [ ] Include `npm run lint` + `npm run typecheck` clean as its own box
 - [ ] Include any docs update the change implies — a dated line in
       `docs/LOG.md` and an archive row in `docs/EXECUTION_PLAN.md` (both written
-      by `update-plan` after the merge), `docs/roadmap.md` only if a phase's
-      intent changes, `CLAUDE.md` if a convention changes
+      by `update-roadmap` on the branch, before the pull request), `docs/roadmap.md`
+      only if a phase's intent changes, `CLAUDE.md` if a convention changes
 ```
 
 ### Examples of failure and success
