@@ -54,9 +54,13 @@ calls the Node-runtime guards (`lib/auth/guards.ts`) which verify the Firebase s
 cookie and look up `app_users.role`. `--allow-unauthenticated` here is deliberate, not an
 oversight.
 
-It is also the one IAM binding exempt from the org's domain-restricted-sharing constraint
-(`constraints/iam.allowedPolicyMemberDomains`), because it is an `allUsers` **invoker**
-binding. Every *other* IAM member you add in this org must be `@bachmancc.org` — see §5.2.
+**The reasoning is right; the binding still does not land by itself.** This runbook used to
+claim the `allUsers` **invoker** binding was exempt from the org's domain-restricted-sharing
+constraint (`constraints/iam.allowedPolicyMemberDomains`). It is **not** — the org refuses it
+unless a project-scoped exception exists on `bcc-admin-prod`, and `gcloud run deploy` reports
+that refusal as a *warning* while exiting `0`, so the deploy looks successful and the service
+answers `403` to everyone. Apply **§3.3 before the first deploy**. Every *other* IAM member
+you add in this org must still be an `@bachmancc.org` identity — see §5.2.
 
 ### Two service accounts, two jobs — do not merge them
 
@@ -181,7 +185,92 @@ docker push "$IMAGE"
 --substitutions …`. There is no such file in the repo today; CI builds with Docker on the
 runner, so none is needed.)*
 
-### 3.3 Deploy the image
+### 3.3 Prerequisite: make the service publicly invocable (human, one-time)
+
+**Do this before the first deploy.** `--allow-unauthenticated` asks Cloud Run to add
+`allUsers` → `roles/run.invoker`, and domain-restricted sharing rejects that member exactly
+as it rejects the WIF binding in §5.2 — same constraint, same remedy, different resource:
+
+```text
+ERROR: (gcloud.run.services.add-iam-policy-binding) FAILED_PRECONDITION: One or more users
+named in the policy do not belong to a permitted customer, perhaps due to an organization
+policy.
+```
+
+`gcloud run deploy` does **not** fail on this. It prints `Setting IAM Policy….warning`, then
+`Completed with warnings`, and exits `0`: the revision serves traffic, the IAM policy stays
+empty (`{"etag": "ACAB"}`), and every request gets `403`. That is precisely what the first
+production deploy did on 2026-11-10 —
+[Issue #21](https://github.com/thedavidhanks/bcc-rentals-admin/issues/21). CI now asserts
+reachability after deploying (P8.7), so the mistake fails the job instead of shipping green,
+but CI cannot repair it: a human has to apply the exception below.
+
+**Who can run it:** an identity with `roles/orgpolicy.policyAdmin` at the org (or the
+`bcc-rentals` folder). **Not** the deploy service account — `github-deployer@…` has no
+org-policy permission and must not be granted any. `roles/resourcemanager.organizationAdmin`
+alone is also insufficient: it carries only `orgpolicy.policy.get` / `policies.list`.
+
+```bash
+# What is in force today?
+gcloud org-policies describe iam.allowedPolicyMemberDomains \
+  --project=bcc-admin-prod --effective
+
+# The project-scoped exception — the same shape as §5.2's. If §5.2 was already applied to
+# bcc-admin-prod this policy exists already; read the probe above before writing a second one.
+cat > /tmp/drs-bcc-admin-prod.yaml <<'YAML'
+name: projects/bcc-admin-prod/policies/iam.allowedPolicyMemberDomains
+spec:
+  inheritFromParent: false
+  rules:
+    - allowAll: true
+YAML
+
+gcloud org-policies set-policy /tmp/drs-bcc-admin-prod.yaml --project=bcc-admin-prod
+```
+
+`allUsers` and `allAuthenticatedUsers` are governed by this same constraint, so the
+`allowAll: true` rule is what re-admits them. A rule listing only the `bachmancc.org` customer
+id will **not** help — the public principals belong to no customer. **Verify before running**
+if you want something tighter than `allowAll`: the constraint's `allowedValues` take customer
+/ directory ids and have no documented way to name the public principals, so `allowAll`
+scoped to this one project is the only form this runbook can vouch for.
+
+Org-policy changes are **not instant**. Allow a few minutes and re-run the `describe` probe
+before concluding the exception did not take.
+
+Then create the binding and verify it actually landed:
+
+```bash
+gcloud run services add-iam-policy-binding bcc-rentals-admin \
+  --project=bcc-admin-prod --region=us-east1 \
+  --member=allUsers --role=roles/run.invoker
+
+# Expect a bindings[] entry for allUsers / roles/run.invoker. A bare {"etag": "…"} with no
+# bindings means the policy is still empty and the service is still unreachable.
+gcloud run services get-iam-policy bcc-rentals-admin \
+  --project=bcc-admin-prod --region=us-east1 --format=json
+
+# Expect 200, or a 3xx redirect to /login — never 403. Scale-to-zero means the first
+# request after a deploy can take many seconds; retry before believing a failure.
+URL="$(gcloud run services describe bcc-rentals-admin \
+  --project=bcc-admin-prod --region=us-east1 --format='value(status.url)')"
+curl -s -o /dev/null -w '%{http_code}\n' "$URL"
+```
+
+Two notes before you do this:
+
+- **It is a security decision, and it is the intended one.** The exception makes the Cloud
+  Run *endpoint* publicly invocable; it does not make the *app* public. Authorization is
+  unchanged — [`middleware.ts`](../middleware.ts) redirects any request without a session
+  cookie to `/login`, and every server entry point re-checks the Firebase session cookie
+  against `app_users` (see the box in §1). Cloud Run IAM was never the gate here. As in §5.2,
+  leave a note in `docs/LOG.md` when you apply it.
+- Unlike §5.2's one-time WIF binding, do **not** assume you can restore the restrictive
+  policy afterwards. Any future deploy that has to re-assert the binding — a recreated
+  service, a new environment — needs the exception in force again. **Verify before running**
+  if you intend to revert: re-run the `get-iam-policy` and `curl` checks above afterwards.
+
+### 3.4 Deploy the image
 
 ```bash
 gcloud run deploy "$SERVICE" \
@@ -474,6 +563,7 @@ person.
 | `Invalid public environment (NEXT_PUBLIC_*)` at boot | the `NEXT_PUBLIC_*` runtime copies were not set — build args alone are not enough |
 | Browser console: Firebase `auth/invalid-api-key`, or sign-in silently fails | build args were missing/blank, so the bundle was compiled with no config; or the domain is not in Firebase Authorized Domains (§4.1) |
 | `… is not a valid value for …` on an optional var | it was set to an empty string; unset it instead |
+| `gcloud run deploy` prints `Completed with warnings` / `Setting IAM Policy….warning`, or the deployed URL returns `403` to everyone | the `allUsers` invoker binding was rejected by domain-restricted sharing — §3.3 was skipped |
 | WIF step fails with a policy violation | §5.2 |
 | `PERMISSION_DENIED … iam.serviceAccounts.actAs` during deploy | step 3 of §5.1 (`roles/iam.serviceAccountUser` on `run-runtime`) was skipped |
 | Deploy succeeded but the site shows stale catalog data | the storefront caches ~30s per instance; unrelated to this app's deploy |
