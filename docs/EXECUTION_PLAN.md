@@ -97,6 +97,13 @@ Operational lessons that cost real time to learn. Not task tracking — keep the
 - **Agent model pins:** use full versioned IDs (`claude-sonnet-5`, `claude-opus-5`); bare
   aliases 404. Agent definitions are cached at session start, so editing a pin needs a
   session restart. See CLAUDE.md.
+- **Never wrap a test harness in `git stash -u`** when the thing under test is itself
+  untracked — the stash takes it too, and the run fails with `No such file or directory`,
+  which reads like a broken script rather than a missing file. Commit a named throwaway
+  file on a temp branch instead. Cost a full re-run while testing the pre-PR hook.
+- **`.claude/settings.json` is read at session start**, same as agent definitions — a hook
+  added mid-session is inert until a restart. Test the script directly by piping it a
+  `{"tool_input":{"command":"…"}}` payload rather than waiting for it to fire.
 
 ## Unfiled minor findings
 
