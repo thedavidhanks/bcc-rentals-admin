@@ -18,7 +18,7 @@ reordered, or rescoped) or when a phase ships — not as issues close.
 An issue opening or closing inside a phase is status, and status lives
 on GitHub.
 
-## Where the system is today (2026-10-06)
+## Where the system is today (2026-11-10)
 
 Bachman Community Center staff sign in to the admin app with a Google
 account or an email and password, and the app checks their Firebase
@@ -33,8 +33,11 @@ and a self-service profile page. Every mutation writes an
 `admin_audit_log` row.
 
 It runs on a developer's machine only. **Nothing is deployed yet** —
-there is no Cloud Run service for this app and no CI; the GCP projects,
-service accounts and secrets that will host it exist and are empty.
+there is no Cloud Run service for this app; the GCP projects, service
+accounts and secrets that will host it exist and are empty. A change
+now reaches `master` only as a reviewed pull request whose tests
+passed, and the path that carries `master` to Cloud Run is built and
+waiting for that first deploy.
 The app reads and writes the storefront's live Neon Postgres database,
 so catalog, price and reservation edits made locally are already real.
 

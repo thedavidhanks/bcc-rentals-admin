@@ -1,140 +1,479 @@
-# Deploy to GCP Cloud Run
+# Deploy the admin app to GCP Cloud Run
 
-Runbook for [EXECUTION_PLAN.md](./EXECUTION_PLAN.md) Block 3 steps **N3.2–N3.5**.
-N3.1 (containerization) is done in-repo: [`Dockerfile`](../Dockerfile), [`.dockerignore`](../.dockerignore),
-and `output: 'standalone'` in [`next.config.ts`](../next.config.ts).
+Runbook for plan phase **P8 — Deployment** (`P8.1`–`P8.6`). This is the **admin** app's
+runbook, written from this repo's own code; it replaces an earlier copy of the
+storefront's runbook that described a different app. The admin app takes **no payments**,
+sends no email, and uses no cache service: its only secret is a database URL and its only
+third-party dependency at runtime is Firebase Authentication. There is no webhook endpoint
+to register anywhere.
 
-The app is a single Next.js 16 container. Cloud Run runs it scale-to-zero
-(min-instances 0), so idle cost is ~$0/mo. Neon + Upstash stay in AWS `us-east-1`,
-so deploy Cloud Run to a nearby region (`us-east1`).
+Containerisation is done in-repo: [`Dockerfile`](../Dockerfile),
+[`.dockerignore`](../.dockerignore), and `output: 'standalone'` in
+[`next.config.ts`](../next.config.ts).
 
-These `gcloud` commands act on **your** GCP account (plus GoDaddy/PayPal dashboard
-steps), so I couldn't run them for you — but you **can** run them from this
-devcontainer: `gcloud` is installed here. First authenticate (the container has no
-logged-in account by default), then replace `PROJECT_ID` and the placeholder
-values. The only non-shell steps are the GoDaddy CNAME entry (N3.4) and the
-PayPal webhook creation (N3.5), done in those web dashboards.
+Two ways to ship:
+
+| | When | Section |
+| --- | --- | --- |
+| **Automated** (normal) | every merge to `master` | [§5 GitHub Actions](#5--automated-deploys-github-actions-p86) |
+| **Manual** (first deploy, or if CI is broken) | by hand from a workstation | [§3 Manual deploy](#3--manual-deploy-p82) |
+
+> **No agent deploys.** Per [`CLAUDE.md`](../CLAUDE.md), a human runs the first real deploy
+> and applies branch protection. Agents may write these files; they do not execute them.
+
+---
+
+## 1 — The target, in one table
+
+| Thing | Value |
+| --- | --- |
+| GCP org | `bachmancc.org` (`513346324292`), folder `bcc-rentals` (`873642981137`) |
+| Project | **`bcc-admin-prod`** (`305395393303`) |
+| Region | `us-east1` (Neon lives in AWS `us-east-1`; keep them close) |
+| Cloud Run service | `bcc-rentals-admin` |
+| Container port | `8080` |
+| Scaling | `--min-instances 0` (scale to zero; idle cost ≈ $0) |
+| Ingress auth | `--allow-unauthenticated` — see the box below |
+| **Runtime** identity | `run-runtime@bcc-admin-prod.iam.gserviceaccount.com` |
+| **Deploy** identity | `github-deployer@bcc-admin-prod.iam.gserviceaccount.com` |
+| Image registry | Artifact Registry `us-east1-docker.pkg.dev/bcc-admin-prod/bcc-admin` |
+| Only secret | `DATABASE_URL` (Secret Manager, already created) |
+| Custom domain | `admin.bachmancc.org` |
+| Firebase / Identity Platform tenant | `bcc-admin-staging` today; a `bcc-admin-prod` web app is planned (§5.4) |
+
+### Why `--allow-unauthenticated` is correct here
+
+Cloud Run IAM gates **Google service accounts**, not the centre's staff, who sign in with
+Google / Email+Password through Firebase. Spec [§10](./ADMIN_APP_SPEC.md) says this
+outright: *"Do **not** rely on Cloud Run IAM `--no-allow-unauthenticated` for user login;
+that gates Google service accounts, not your social-login users."*
+
+**The app is the gate.** [`middleware.ts`](../middleware.ts) redirects any request without
+a session cookie to `/login`, and every Server Component, route handler, and server action
+calls the Node-runtime guards (`lib/auth/guards.ts`) which verify the Firebase session
+cookie and look up `app_users.role`. `--allow-unauthenticated` here is deliberate, not an
+oversight.
+
+It is also the one IAM binding exempt from the org's domain-restricted-sharing constraint
+(`constraints/iam.allowedPolicyMemberDomains`), because it is an `allUsers` **invoker**
+binding. Every *other* IAM member you add in this org must be `@bachmancc.org` — see §5.2.
+
+### Two service accounts, two jobs — do not merge them
+
+- **`run-runtime@…`** is what the *running container* is. It must stay least-privilege:
+  `roles/secretmanager.secretAccessor` on the `DATABASE_URL` secret, and nothing else. It
+  is passed to `gcloud run deploy` as `--service-account`. **Never grant it deploy roles.**
+- **`github-deployer@…`** is what *CI impersonates to perform a deploy*. It needs
+  `roles/run.admin`, `roles/artifactregistry.writer`, and `roles/iam.serviceAccountUser` on
+  `run-runtime` (to be allowed to assign that runtime identity). It never runs the app.
+
+---
+
+## 2 — Configuration: what is a secret, what is a build arg, what is both
+
+[`lib/env.ts`](../lib/env.ts) (server) and [`lib/public-env.ts`](../lib/public-env.ts)
+(client-safe) are the source of truth. Both Zod-validate **at module load**, so the app
+*fails to start* — and `next build` *fails to build* — when a required var is missing.
+
+| Var | Secret? | Build time | Runtime | Notes |
+| --- | --- | --- | --- | --- |
+| `DATABASE_URL` | **yes** (Secret Manager) | placeholder only | **yes** | Neon **pooled** endpoint, prod branch |
+| `FIREBASE_PROJECT_ID` | no | yes | yes | Admin SDK project id |
+| `NEXT_PUBLIC_SITE_URL` | no | **yes** | yes | `https://admin.bachmancc.org` |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | no | **yes** | yes | publishable client config |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | no | **yes** | yes | |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | no | **yes** | yes | |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | no | **yes** | yes | |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | no | optional | optional | omit entirely if unused — an **empty string fails** `.min(1)` |
+| `ALLOWED_EMAIL_DOMAIN` | no | — | optional | e.g. `bachmancc.org`; omit entirely if unused |
+| `NODE_ENV` | no | — | `production` | already set in the image |
+| `DATABASE_URL_DEV` | — | **never** | **never** | local DDL tooling only |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | **never** | **never** | **local dev only.** On Cloud Run the runtime SA's Application Default Credentials sign session cookies — do **not** add a key file as a Cloud Run secret |
+| `AUTH_DEV_BYPASS` | — | **never** | **never** | dev-only; forced off in production anyway |
+
+Three rules that follow from that table:
+
+1. **`NEXT_PUBLIC_*` must be passed twice.** Next.js inlines them into the browser bundle
+   at *build* time, so they must be `--build-arg`s; `lib/public-env.ts` also validates them
+   *server-side* at module load, so the same values must be set again as runtime env vars.
+   Keep the two copies identical — a mismatch ships a browser bundle pointing at one
+   Firebase project while the server thinks it is another.
+2. **`DATABASE_URL` is a build arg only as a placeholder.** `next build` imports
+   `lib/env.ts` but never opens a connection (verified: every route is `ƒ` dynamic, nothing
+   is prerendered against the DB). The [`Dockerfile`](../Dockerfile) defaults it to
+   `postgresql://build:build@localhost:5432/build`. **Do not pass the real connection
+   string as a build arg** — build args are recorded in image metadata.
+3. **Omit optional vars rather than setting them empty.** They are `.min(1).optional()`:
+   absent is fine, `""` is a boot failure.
+
+---
+
+## 3 — Manual deploy (P8.2)
+
+Use this for the first deploy, or when CI is unavailable. `gcloud` is installed in the
+devcontainer but has no logged-in account by default.
 
 ```bash
-gcloud auth login          # one-time: log in as yourself (opens a browser link)
-export PROJECT_ID=your-gcp-project
+gcloud auth login                       # as an @bachmancc.org identity
+export PROJECT_ID=bcc-admin-prod
 export REGION=us-east1
-export SERVICE=bcc-rentals
+export SERVICE=bcc-rentals-admin
+export AR_REPO=bcc-admin
+export RUNTIME_SA="run-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
 gcloud config set project "$PROJECT_ID"
 ```
 
----
+### 3.1 One-time project setup (mostly already done under P10)
 
-## N3.2 — Create the Cloud Run service
-
-Cloud Build reads the repo `Dockerfile` when you deploy `--source .`, so local
-Docker is **not** required.
+APIs `run`, `artifactregistry`, `identitytoolkit`, `secretmanager`, `iam`, and
+`cloudbuild` are **already enabled** on `bcc-admin-prod`, and the `DATABASE_URL` secret
+already exists with `run-runtime` granted `secretAccessor`. The commands below are
+idempotent — run them only to verify or to rebuild the project from scratch.
 
 ```bash
-# One-time: enable the APIs
 gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  secretmanager.googleapis.com
+  run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
+  identitytoolkit.googleapis.com iam.googleapis.com cloudbuild.googleapis.com
 
-# Deploy from source. NEXT_PUBLIC_PAYPAL_CLIENT_ID is inlined into the browser
-# bundle AT BUILD TIME (it's read client-side), so it must be a BUILD arg, not a
-# runtime env var. --allow-unauthenticated makes the storefront public.
+# The Docker repository the image is pushed to.
+gcloud artifacts repositories create "$AR_REPO" \
+  --repository-format=docker --location="$REGION" \
+  --description="bcc-rentals-admin container images" \
+  || echo "already exists"
+
+# The ONLY secret this app has. (Already created — this is the shape, not a to-do.)
+printf '%s' "REPLACE_ME_WITH_THE_NEON_POOLED_PROD_URL" \
+  | gcloud secrets create DATABASE_URL --data-file=- \
+  || printf '%s' "REPLACE_ME_WITH_THE_NEON_POOLED_PROD_URL" \
+     | gcloud secrets versions add DATABASE_URL --data-file=-
+
+gcloud secrets add-iam-policy-binding DATABASE_URL \
+  --member="serviceAccount:${RUNTIME_SA}" \
+  --role=roles/secretmanager.secretAccessor
+```
+
+### 3.2 Build and push the image
+
+Build explicitly rather than with `gcloud run deploy --source .`. The `NEXT_PUBLIC_*`
+values have to reach the build as Docker `--build-arg`s, and neither `--source .` nor
+`gcloud builds submit --tag` gives you a dependable way to pass them (`--set-build-env-vars`
+is a buildpacks feature). Building the image yourself keeps the build inputs unambiguous and
+makes the manual path identical to what CI does.
+
+```bash
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE}:$(git rev-parse --short HEAD)"
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+docker build \
+  --build-arg "NEXT_PUBLIC_SITE_URL=https://admin.bachmancc.org" \
+  --build-arg "NEXT_PUBLIC_FIREBASE_API_KEY=YOUR_PROD_FIREBASE_API_KEY" \
+  --build-arg "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=YOUR_PROD_FIREBASE_AUTH_DOMAIN" \
+  --build-arg "NEXT_PUBLIC_FIREBASE_PROJECT_ID=YOUR_PROD_FIREBASE_PROJECT_ID" \
+  --build-arg "NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_PROD_FIREBASE_APP_ID" \
+  --build-arg "FIREBASE_PROJECT_ID=YOUR_PROD_FIREBASE_PROJECT_ID" \
+  -t "$IMAGE" .
+
+docker push "$IMAGE"
+```
+
+*(No local Docker? Then add a `cloudbuild.yaml` that forwards substitutions to
+`docker build --build-arg …` and run `gcloud builds submit --config cloudbuild.yaml
+--substitutions …`. There is no such file in the repo today; CI builds with Docker on the
+runner, so none is needed.)*
+
+### 3.3 Deploy the image
+
+```bash
 gcloud run deploy "$SERVICE" \
-  --source . \
+  --image "$IMAGE" \
   --region "$REGION" \
+  --platform managed \
   --port 8080 \
   --min-instances 0 \
   --allow-unauthenticated \
-  --set-build-env-vars "NEXT_PUBLIC_PAYPAL_CLIENT_ID=YOUR_LIVE_PAYPAL_CLIENT_ID"
+  --service-account "$RUNTIME_SA" \
+  --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
+  --set-env-vars "^;^NODE_ENV=production;\
+NEXT_PUBLIC_SITE_URL=https://admin.bachmancc.org;\
+NEXT_PUBLIC_FIREBASE_API_KEY=YOUR_PROD_FIREBASE_API_KEY;\
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=YOUR_PROD_FIREBASE_AUTH_DOMAIN;\
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=YOUR_PROD_FIREBASE_PROJECT_ID;\
+NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_PROD_FIREBASE_APP_ID;\
+FIREBASE_PROJECT_ID=YOUR_PROD_FIREBASE_PROJECT_ID"
 ```
 
-> The flag is `--set-build-env-vars` (older docs/versions show `--build-env-vars`,
-> which current gcloud rejects). If your gcloud version supports neither on
-> `run deploy`, instead build first with a substitution and deploy the image:
-> `gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT_ID/bcc-rentals/app --substitutions _PAYPAL=... ` (with a `cloudbuild.yaml` passing `--build-arg NEXT_PUBLIC_PAYPAL_CLIENT_ID=$_PAYPAL`), then `gcloud run deploy $SERVICE --image ...`.
+`^;^` is gcloud's custom-delimiter syntax: it splits the list on `;` instead of `,`, so a
+value containing a comma cannot split one pair into two.
 
-The first deploy prints the service URL (`https://bcc-rentals-xxxx.a.run.app`).
-Use it for the initial smoke test before the custom domain is live.
+The first deploy prints the service URL (`https://bcc-rentals-admin-….a.run.app`). Smoke
+test it before mapping the domain: hitting `/` unauthenticated must redirect to `/login`.
 
 ---
 
-## N3.3 — Env vars & secrets
-
-[`lib/env.ts`](../lib/env.ts) is the source of truth for the full var list. Split
-into **secrets** (Secret Manager) and **plain config** (`--set-env-vars`).
+## 4 — Custom domain `admin.bachmancc.org` (P8.3)
 
 ```bash
-# Create secrets (repeat per secret; --data-file=- reads stdin)
-for s in PAYPAL_CLIENT_SECRET RESEND_API_KEY UPSTASH_REDIS_REST_TOKEN DATABASE_URL; do
-  printf '%s' "REPLACE_ME" | gcloud secrets create "$s" --data-file=- 2>/dev/null \
-    || printf '%s' "REPLACE_ME" | gcloud secrets versions add "$s" --data-file=-
-done
-
-# Grant the Cloud Run runtime service account access
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-for s in PAYPAL_CLIENT_SECRET RESEND_API_KEY UPSTASH_REDIS_REST_TOKEN DATABASE_URL; do
-  gcloud secrets add-iam-policy-binding "$s" \
-    --member="serviceAccount:${SA}" --role=roles/secretmanager.secretAccessor
-done
-
-# Wire secrets + plain config onto the service
-gcloud run services update "$SERVICE" --region "$REGION" \
-  --set-secrets "PAYPAL_CLIENT_SECRET=PAYPAL_CLIENT_SECRET:latest,\
-RESEND_API_KEY=RESEND_API_KEY:latest,\
-UPSTASH_REDIS_REST_TOKEN=UPSTASH_REDIS_REST_TOKEN:latest,\
-DATABASE_URL=DATABASE_URL:latest" \
-  --set-env-vars "NODE_ENV=production,\
-NEXT_PUBLIC_SITE_URL=https://rentals.bachmancc.org,\
-PAYPAL_ENV=live,\
-PAYPAL_CLIENT_ID=YOUR_LIVE_PAYPAL_CLIENT_ID,\
-PAYPAL_WEBHOOK_ID=SET_AFTER_N3.5,\
-NEXT_PUBLIC_PAYPAL_CLIENT_ID=YOUR_LIVE_PAYPAL_CLIENT_ID,\
-EMAIL_FROM=BCC Rentals <rentals@bachmancc.org>,\
-STAFF_NOTIFICATION_EMAIL=reservations@bachmancc.org,\
-UPSTASH_REDIS_REST_URL=https://your-db.upstash.io"
-```
-
-Notes:
-- `NEXT_PUBLIC_PAYPAL_CLIENT_ID` appears in **both** the build arg (N3.2) and the
-  runtime env — the build value is what the browser actually ships; the runtime
-  copy just satisfies `lib/env.ts` at boot. Keep them identical.
-- Stripe has been removed (Block D / D1) — no `STRIPE_*` vars are needed. PayPal
-  handles cards via guest checkout.
-- `DATABASE_URL` must be Neon's **pooled** `main`-branch endpoint.
-
----
-
-## N3.4 — Custom domain
-
-```bash
-# Lower the GoDaddy TTL on the existing record FIRST (e.g. 600s), wait for it to
-# propagate, then:
+# Lower the TTL on any existing GoDaddy record FIRST (e.g. 600s) and let it propagate.
 gcloud beta run domain-mappings create \
   --service "$SERVICE" --region "$REGION" \
-  --domain rentals.bachmancc.org
+  --domain admin.bachmancc.org
 ```
 
-The command prints the DNS record to add. Create the matching **CNAME** in
-GoDaddy (`rentals` → `ghs.googlehosted.com` or the exact target returned). Cloud
-Run provisions the TLS cert automatically once DNS resolves (can take
-minutes–hours). Verify: `curl -sI https://rentals.bachmancc.org/` → `200`.
+The command prints the DNS record to create. Add the matching **CNAME** in GoDaddy
+(`admin` → `ghs.googlehosted.com`, or whatever exact target it returned). Cloud Run
+provisions the TLS certificate automatically once DNS resolves — minutes to hours.
+
+Verify: `curl -sI https://admin.bachmancc.org/` → a redirect to `/login`.
+
+### 4.1 Then: Firebase Authorized Domains (also P8.3)
+
+Sign-in will fail on the new domain until it is allow-listed. Before the first real
+sign-in against `admin.bachmancc.org`:
+
+1. Firebase console → **Authentication → Settings → Authorized domains** → add
+   `admin.bachmancc.org` (and the `*.run.app` service URL if you want to keep using it).
+2. Add the same origin to each enabled provider's allowed redirect/callback list. Launch
+   providers are **Google** and **Email/Password**; Email/Password needs no callback.
+   GitHub / Facebook / Apple are deferred and have no OAuth apps yet.
+3. Set `NEXT_PUBLIC_SITE_URL=https://admin.bachmancc.org` (already the value above) and
+   redeploy if it was previously the `.run.app` URL — it is baked into the browser bundle.
+
+Spec [§10](./ADMIN_APP_SPEC.md) is the authority for this step.
 
 ---
 
-## N3.5 — PayPal live webhook
+## 5 — Automated deploys: GitHub Actions (P8.6)
 
-1. In the PayPal Developer dashboard (Live), add a webhook for your app:
-   URL `https://rentals.bachmancc.org/api/webhooks/paypal`, subscribed to the
-   payment/checkout order events the app handles.
-2. Copy the generated **Webhook ID** into the `PAYPAL_WEBHOOK_ID` env var:
-   ```bash
-   gcloud run services update "$SERVICE" --region "$REGION" \
-     --update-env-vars "PAYPAL_WEBHOOK_ID=YOUR_WEBHOOK_ID"
-   ```
-3. Send a test event from the dashboard and confirm it's accepted (the route
-   verifies the signature with `PAYPAL_WEBHOOK_ID`).
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) holds both jobs:
 
-Then run the Block 5 production smoke tests.
+- **`test`** — runs on every `pull_request` targeting `master` and every push to `master`:
+  `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, then a `npm run build` with
+  obvious placeholder env (the suite needs no DB, secrets, or network; the build needs env
+  only to satisfy Zod boot validation).
+- **`deploy (bcc-admin-prod)`** — `needs: test`, and additionally guarded by
+  `if: github.event_name == 'push' && github.ref == 'refs/heads/master'`. It can never run
+  from a pull request or a topic branch. It is serialised by a
+  `concurrency: deploy-bcc-admin-prod` group with `cancel-in-progress: false`, so two
+  merges in quick succession queue instead of racing. It is bound to the GitHub
+  **Environment `production`**, which is where its variables live and where an optional
+  manual-approval gate can be switched on.
+
+All third-party actions are pinned to a commit SHA with the version in a trailing comment.
+Nothing in the job echoes a credential: no `set -x`, no `--verbosity=debug`, and every
+`vars.*` value is bound through `env:` rather than interpolated into a shell string.
+
+### 5.1 One-time GCP setup for Workload Identity Federation (keyless)
+
+Run these once, as an `@bachmancc.org` identity with project IAM admin on
+`bcc-admin-prod`. They create the **deployer** service account and let *only* this repo's
+`master` branch impersonate it, with no long-lived key anywhere.
+
+```bash
+PROJECT_ID=bcc-admin-prod
+PROJECT_NUMBER=305395393303
+REGION=us-east1
+REPO=thedavidhanks/bcc-rentals-admin
+POOL=github
+PROVIDER=github-oidc
+DEPLOYER="github-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+RUNTIME_SA="run-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# 1. The deploy identity (separate from the runtime identity).
+gcloud iam service-accounts create github-deployer \
+  --project="$PROJECT_ID" \
+  --display-name="GitHub Actions deployer (bcc-rentals-admin)"
+
+# 2. Deploy permissions — on the PROJECT, not on run-runtime.
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOYER}" --role="roles/run.admin"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOYER}" --role="roles/artifactregistry.writer"
+
+# 3. Let the deployer assign run-runtime as the service's identity.
+#    Scoped to that one SA — this is NOT a project-wide serviceAccountUser grant.
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOYER}" --role="roles/iam.serviceAccountUser"
+
+# 4. Workload Identity pool + GitHub OIDC provider.
+gcloud iam workload-identity-pools create "$POOL" \
+  --project="$PROJECT_ID" --location=global \
+  --display-name="GitHub Actions"
+
+gcloud iam workload-identity-pools providers create-oidc "$PROVIDER" \
+  --project="$PROJECT_ID" --location=global --workload-identity-pool="$POOL" \
+  --display-name="GitHub OIDC" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner,attribute.ref=assertion.ref" \
+  --attribute-condition="assertion.repository=='${REPO}' && assertion.ref=='refs/heads/master'"
+
+# 5. The binding that domain-restricted sharing may reject — see 5.2.
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER" \
+  --project="$PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/attribute.repository/${REPO}"
+
+# 6. Also create the Artifact Registry repo if §3.1 has not been run.
+gcloud artifacts repositories create bcc-admin \
+  --project="$PROJECT_ID" --repository-format=docker --location="$REGION" \
+  || echo "already exists"
+```
+
+The attribute condition pins the credential to this repository **and** to `refs/heads/master`.
+If a future workflow ever needs to authenticate from another branch (e.g. a staging
+deploy), widen the condition deliberately — do not drop it.
+
+The value for the `GCP_WORKLOAD_IDENTITY_PROVIDER` variable (§5.3) is then:
+
+```
+projects/305395393303/locations/global/workloadIdentityPools/github/providers/github-oidc
+```
+
+### 5.2 If the org policy rejects the WIF binding
+
+The org enforces `constraints/iam.allowedPolicyMemberDomains` (domain-restricted sharing),
+which requires every IAM member to belong to the `bachmancc.org` Cloud Identity customer.
+A `principalSet://iam.googleapis.com/…` member is not such an identity, so step 5 above may
+fail with a policy-violation error.
+
+**The documented fallback is a project-scoped org-policy exception** — not a service
+account key. Apply the override at `bcc-admin-prod` only, so the rest of the org keeps the
+restriction. You need `roles/orgpolicy.policyAdmin` at the org (or folder) level.
+
+```bash
+# What is in force today?
+gcloud org-policies describe iam.allowedPolicyMemberDomains \
+  --organization=513346324292 --effective
+
+cat > /tmp/drs-bcc-admin-prod.yaml <<'YAML'
+name: projects/bcc-admin-prod/policies/iam.allowedPolicyMemberDomains
+spec:
+  inheritFromParent: false
+  rules:
+    - allowAll: true
+YAML
+
+gcloud org-policies set-policy /tmp/drs-bcc-admin-prod.yaml --project=bcc-admin-prod
+
+# Now re-run step 5 of §5.1, then confirm the binding landed:
+gcloud iam service-accounts get-iam-policy \
+  "github-deployer@bcc-admin-prod.iam.gserviceaccount.com" --project=bcc-admin-prod
+```
+
+Two things worth knowing before you do this:
+
+- The override widens *who may be added to IAM in `bcc-admin-prod`*. It is one project, and
+  that project contains only this app — but it is a real loosening, so leave a note in
+  `docs/LOG.md` when you apply it.
+- Domain-restricted sharing is evaluated **when a binding is created**, not continuously.
+  That means you can restore the restrictive policy after the one-time binding exists;
+  re-run the `get-iam-policy` check afterwards to confirm the binding survived before
+  relying on it.
+
+A service-account JSON key in a GitHub Actions secret would also work and is **explicitly
+rejected**: it is a long-lived deploy credential sitting in a public repository's settings,
+with no expiry and no per-branch scoping. Do not use it.
+
+### 5.3 GitHub configuration the human must create
+
+**Repository variables** (Settings → Secrets and variables → Actions → *Variables*):
+
+| Name | Value |
+| --- | --- |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/305395393303/locations/global/workloadIdentityPools/github/providers/github-oidc` |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | `github-deployer@bcc-admin-prod.iam.gserviceaccount.com` |
+
+**Environment `production`** (Settings → Environments → *New environment* → `production`;
+optionally add yourself as a required reviewer to gate every deploy). Its *variables*:
+
+| Name | Value |
+| --- | --- |
+| `PROD_NEXT_PUBLIC_SITE_URL` | `https://admin.bachmancc.org` |
+| `PROD_NEXT_PUBLIC_FIREBASE_API_KEY` | the **prod** Firebase web app's API key |
+| `PROD_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | the **prod** Firebase auth domain |
+| `PROD_NEXT_PUBLIC_FIREBASE_PROJECT_ID` | the **prod** Firebase project id |
+| `PROD_NEXT_PUBLIC_FIREBASE_APP_ID` | the **prod** Firebase web app id |
+| `PROD_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | optional — **leave unset** rather than empty |
+| `PROD_FIREBASE_PROJECT_ID` | Admin SDK project id (same Firebase project as above) |
+| `PROD_ALLOWED_EMAIL_DOMAIN` | optional — `bachmancc.org` once every admin has a `@bachmancc.org` identity. **Setting this locks out any Gmail-identity admin immediately** |
+
+**No Actions *secrets* are required.** `DATABASE_URL` never leaves Secret Manager; WIF
+needs no stored credential. If an Actions secret ever appears in this repo, that is worth a
+second look.
+
+### 5.4 Staging vs production Firebase
+
+The `NEXT_PUBLIC_FIREBASE_*` values in local `.env.local` are the **staging**
+(`bcc-admin-staging`, `612782676839`) web app's. They are *not* what production should
+use. A `bcc-admin-prod` (`305395393303`) Firebase Web App registration is being created
+separately; its values are what go into the `PROD_*` variables above.
+
+Nothing in the workflow hardcodes either environment, so adding staging later is additive:
+a `staging` GitHub Environment with `STAGING_*` variables and a second job (or a
+`environment:`-parameterised matrix) pointing at a `bcc-admin-staging` Cloud Run service.
+Standing that service up is **out of scope** today — `bcc-admin-staging` has no Cloud Run
+service and the Neon dev branch has zero `app_users` rows, so nobody could sign in to it.
+
+### 5.5 Branch protection on `master` (human, one-time)
+
+This is a repository **settings** change — no file in the repo can enable it, and it is
+deliberately not applied by any agent. It requires the `repo` admin scope
+(`gh auth refresh -s admin:repo_hook,repo` if `gh` complains).
+
+First confirm the exact status-check name GitHub records for the CI job (it is the **job**
+name, which may or may not be displayed with the workflow prefix):
+
+```bash
+gh api "repos/thedavidhanks/bcc-rentals-admin/commits/master/check-runs" \
+  --jq '.check_runs[].name'
+# expect: test
+```
+
+Then apply the protection, substituting that exact string into `contexts` if it differs:
+
+```bash
+gh api -X PUT repos/thedavidhanks/bcc-rentals-admin/branches/master/protection \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["test"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
+    "required_approving_review_count": 0
+  },
+  "restrictions": null,
+  "required_linear_history": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true
+}
+JSON
+
+# Verify — this currently returns {"message":"Branch not protected"}.
+gh api repos/thedavidhanks/bcc-rentals-admin/branches/master/protection
+```
+
+What that policy means: no direct pushes to `master` by anyone including administrators
+(`enforce_admins: true`); every change arrives through a pull request; the `test` check must
+be green; and `strict: true` means the branch must be up to date with `master` before the
+merge button unlocks. `required_approving_review_count` is `0` because the project has a
+single maintainer who reads their own diffs — raise it to `1` the moment there is a second
+person.
+
+---
+
+## 6 — Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| Container fails to start, logs show `Invalid server environment … DATABASE_URL: Required` | `--set-secrets` missing, or the runtime SA lost `secretAccessor` |
+| `Invalid public environment (NEXT_PUBLIC_*)` at boot | the `NEXT_PUBLIC_*` runtime copies were not set — build args alone are not enough |
+| Browser console: Firebase `auth/invalid-api-key`, or sign-in silently fails | build args were missing/blank, so the bundle was compiled with no config; or the domain is not in Firebase Authorized Domains (§4.1) |
+| `… is not a valid value for …` on an optional var | it was set to an empty string; unset it instead |
+| WIF step fails with a policy violation | §5.2 |
+| `PERMISSION_DENIED … iam.serviceAccounts.actAs` during deploy | step 3 of §5.1 (`roles/iam.serviceAccountUser` on `run-runtime`) was skipped |
+| Deploy succeeded but the site shows stale catalog data | the storefront caches ~30s per instance; unrelated to this app's deploy |

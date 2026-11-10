@@ -1,0 +1,240 @@
+# CI + CD for bcc-rentals-admin (plan P8.6).
+#
+# Why one file with two jobs instead of a separate `workflow_run` deploy
+# workflow: `needs:` gives a single, readable run graph where the deploy is
+# visibly gated on the same commit's tests, and the deploy job can be bound to
+# the `production` GitHub Environment (optional manual approval). `workflow_run`
+# would always execute the workflow definition from the DEFAULT branch, re-derive
+# the commit, and show up as a second disconnected run — more moving parts for no
+# benefit at this size.
+#
+# Trigger safety: the test job runs on `pull_request` (NOT `pull_request_target`)
+# so untrusted fork code never executes with repository credentials, and the
+# deploy job is additionally guarded by an `if:` on event + ref so it can only
+# ever run for a push to master.
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+# Least privilege by default; the deploy job widens this for itself only.
+permissions:
+  contents: read
+
+concurrency:
+  # One in-flight run per ref. PR runs are superseded by newer pushes; master
+  # runs are NOT cancelled, because cancelling mid-deploy is worse than queueing
+  # (the deploy job has its own serialising group as well).
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    # Stable job name — branch protection requires the check "CI / test".
+    # Renaming this breaks the required status check; update the ruleset too.
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          # Match the Dockerfile's node:22-alpine, not whatever the devcontainer runs.
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # vitest.config.ts stubs `server-only` and aliases @bcc/scheduler to the
+      # in-tree sources, so the suite needs no database, no secrets and no network.
+      - name: Test
+        run: npm test
+
+      # Deliberately NOT a bare `npm run build`: lib/env.ts and lib/public-env.ts
+      # Zod-validate at module load, so a build with no env fails with
+      # "DATABASE_URL: Required". These are obvious throwaway placeholders — the
+      # build never opens a connection and never contacts Firebase; the real
+      # values are injected in the deploy job (build args) and at runtime
+      # (Secret Manager / --set-env-vars).
+      - name: Build (with placeholder env)
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+          FIREBASE_PROJECT_ID: ci-placeholder
+          NEXT_PUBLIC_SITE_URL: https://admin.example.invalid
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-placeholder.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-placeholder
+          NEXT_PUBLIC_FIREBASE_APP_ID: ci-placeholder
+        run: npm run build
+
+  deploy:
+    name: deploy (bcc-admin-prod)
+    needs: test
+    # Belt and braces: `on.push.branches` already limits this workflow, but this
+    # guard means the job cannot fire from a pull request or any other ref.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # GitHub Environment: holds the production-only variables below and gives the
+    # repo owner an optional manual-approval gate / deployment history. A future
+    # `staging` environment can reuse this job shape with its own variables.
+    environment:
+      name: production
+      url: https://admin.bachmancc.org
+    concurrency:
+      # Serialise production deploys: two merges in quick succession queue rather
+      # than race, so the last merge is the last deploy.
+      group: deploy-bcc-admin-prod
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      # Required to mint the OIDC token that Workload Identity Federation exchanges.
+      id-token: write
+    env:
+      GCP_PROJECT_ID: bcc-admin-prod
+      GCP_REGION: us-east1
+      AR_REPOSITORY: bcc-admin
+      SERVICE_NAME: bcc-rentals-admin
+      # The Cloud Run RUNTIME identity (least privilege: Secret Manager accessor).
+      # Distinct from the deploy identity the workflow impersonates — see
+      # docs/DEPLOY_CLOUD_RUN.md.
+      RUNTIME_SERVICE_ACCOUNT: run-runtime@bcc-admin-prod.iam.gserviceaccount.com
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # Keyless auth. No JSON key exists anywhere; GitHub's OIDC token is
+      # exchanged for a short-lived access token for the deployer service
+      # account. See docs/DEPLOY_CLOUD_RUN.md for the one-time pool/provider
+      # setup and for the org-policy exception this may require.
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Resolve image reference
+        id: image
+        run: |
+          set -euo pipefail
+          echo "ref=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${SERVICE_NAME}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      # NEXT_PUBLIC_* are inlined into the browser bundle at BUILD time, so they
+      # must be build args — a runtime-only value would ship an app that cannot
+      # reach Firebase. They are publishable client config, but they differ per
+      # environment, so they come from GitHub Environment variables rather than
+      # literals. The same values are set again as runtime env below, because
+      # lib/public-env.ts also validates them server-side at module load.
+      # Every ${{ vars.* }} is bound through `env:` rather than interpolated into
+      # the script body, so a value containing shell metacharacters is data, not code.
+      - name: Build image
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.PROD_NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_APP_ID }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_PROJECT_ID: ${{ vars.PROD_FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg "NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}" \
+            --build-arg "NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}" \
+            --build-arg "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}" \
+            --build-arg "NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}" \
+            --build-arg "NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}" \
+            --build-arg "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}" \
+            --build-arg "FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}" \
+            --tag "$IMAGE" \
+            .
+
+      - name: Push image
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: docker push "$IMAGE"
+
+      # Optional vars (NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      # ALLOWED_EMAIL_DOMAIN) are `.min(1).optional()` in the Zod schemas: an
+      # EMPTY string fails validation where an absent var is fine, so only append
+      # them when they actually have a value. AUTH_DEV_BYPASS is deliberately
+      # never set in production.
+      - name: Compose runtime env vars
+        id: runtime_env
+        env:
+          SITE_URL: ${{ vars.PROD_NEXT_PUBLIC_SITE_URL }}
+          API_KEY: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_API_KEY }}
+          AUTH_DOMAIN: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          WEB_PROJECT_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          APP_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_APP_ID }}
+          SENDER_ID: ${{ vars.PROD_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          ADMIN_PROJECT_ID: ${{ vars.PROD_FIREBASE_PROJECT_ID }}
+          ALLOWED_DOMAIN: ${{ vars.PROD_ALLOWED_EMAIL_DOMAIN }}
+        run: |
+          set -euo pipefail
+          # `^;^` tells gcloud to split this list on ';' instead of ',', so a
+          # value that legitimately contains a comma cannot split a pair in two.
+          list="^;^NODE_ENV=production"
+          list="${list};NEXT_PUBLIC_SITE_URL=${SITE_URL}"
+          list="${list};NEXT_PUBLIC_FIREBASE_API_KEY=${API_KEY}"
+          list="${list};NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${AUTH_DOMAIN}"
+          list="${list};NEXT_PUBLIC_FIREBASE_PROJECT_ID=${WEB_PROJECT_ID}"
+          list="${list};NEXT_PUBLIC_FIREBASE_APP_ID=${APP_ID}"
+          list="${list};FIREBASE_PROJECT_ID=${ADMIN_PROJECT_ID}"
+          if [ -n "${SENDER_ID}" ]; then
+            list="${list};NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${SENDER_ID}"
+          fi
+          if [ -n "${ALLOWED_DOMAIN}" ]; then
+            list="${list};ALLOWED_EMAIL_DOMAIN=${ALLOWED_DOMAIN}"
+          fi
+          echo "vars=${list}" >> "$GITHUB_OUTPUT"
+
+      # --allow-unauthenticated is correct here: Cloud Run IAM gates Google
+      # service accounts, not Firebase-authenticated staff. The APP is the gate —
+      # middleware checks the session cookie and the app_users lookup authorizes
+      # (spec §10). The allUsers invoker binding is also exempt from the org's
+      # domain-restricted-sharing constraint.
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          RUNTIME_ENV_VARS: ${{ steps.runtime_env.outputs.vars }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$SERVICE_NAME" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image "$IMAGE" \
+            --platform managed \
+            --port 8080 \
+            --min-instances 0 \
+            --allow-unauthenticated \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
+            --set-env-vars "$RUNTIME_ENV_VARS" \
+            --quiet
+
+      - name: Show service URL
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE_NAME" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --format 'value(status.url)'
