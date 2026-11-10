@@ -154,7 +154,62 @@ printf '%s' "REPLACE_ME_WITH_THE_NEON_POOLED_PROD_URL" \
 gcloud secrets add-iam-policy-binding DATABASE_URL \
   --member="serviceAccount:${RUNTIME_SA}" \
   --role=roles/secretmanager.secretAccessor
+
+# Firebase Admin SDK permissions for the RUNTIME identity. Without these the app
+# deploys, boots and serves /login — and then every sign-in fails. See below.
+gcloud iam roles create adminAppAuth --project="$PROJECT_ID" \
+  --title="Admin app auth runtime" \
+  --description="Minimum Identity Platform access for the admin app's server code" \
+  --permissions=firebaseauth.users.createSession,firebaseauth.users.get,firebaseauth.users.update \
+  || echo "already exists"
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${RUNTIME_SA}" \
+  --role="projects/${PROJECT_ID}/roles/adminAppAuth"
 ```
+
+#### `run-runtime` needs Identity Platform access, not just the secret
+
+This is the step that is easiest to miss, because skipping it produces a deploy that
+looks **completely healthy**: the container starts, Zod env validation passes, `/`
+redirects to `/login`, and the login page renders with the right Firebase config. Sign-in
+then fails on the server with:
+
+```text
+Credential implementation provided to initializeApp() via the "credential" property
+has insufficient permission to access the requested resource.
+```
+
+That message names the *credential*, which sends you looking at `GOOGLE_APPLICATION_CREDENTIALS`
+and ADC. The credential is fine. On Cloud Run the Admin SDK uses the runtime service
+account's ADC, and `run-runtime` is deliberately least-privilege — created under P10 with
+**no project roles at all**, only `secretAccessor` on one secret. It therefore cannot call
+Identity Platform. Diagnose it with:
+
+```bash
+gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
+  --filter="bindings.members:${RUNTIME_SA}" --format='value(bindings.role)'
+# No output = this step was skipped.
+```
+
+Three permissions are needed, and each is traceable to a call in the app:
+
+| Permission | Required by |
+| --- | --- |
+| `firebaseauth.users.createSession` | `createSessionCookie` in `lib/auth/session.ts` |
+| `firebaseauth.users.get` | `verifyIdToken(idToken, true)` and `verifySessionCookie(value, true)` — both pass `checkRevoked: true`, which calls the API rather than verifying locally |
+| `firebaseauth.users.update` | `setCustomUserClaims` in `app/users/actions.ts` |
+
+`roles/firebaseauth.admin` also covers all three and is a single command, but it adds the
+ability to create and delete Firebase users — worth avoiding on an identity whose entire
+purpose is to be minimal. If you grant it as a stopgap, narrow it afterwards.
+
+IAM changes apply to the **running** revision; no redeploy is needed. Allow a minute for
+propagation, and force a new revision only if it is still failing after a few.
+
+Local development does not exercise any of this: `GOOGLE_APPLICATION_CREDENTIALS` points
+at an impersonated `firebase-adminsdk-fbsvc` credential that already holds these
+permissions, so sign-in works on localhost while the deployment is broken.
 
 ### 3.2 Build and push the image
 
@@ -564,6 +619,7 @@ person.
 | Browser console: Firebase `auth/invalid-api-key`, or sign-in silently fails | build args were missing/blank, so the bundle was compiled with no config; or the domain is not in Firebase Authorized Domains (§4.1) |
 | `… is not a valid value for …` on an optional var | it was set to an empty string; unset it instead |
 | `gcloud run deploy` prints `Completed with warnings` / `Setting IAM Policy….warning`, or the deployed URL returns `403` to everyone | the `allUsers` invoker binding was rejected by domain-restricted sharing — §3.3 was skipped |
+| Sign-in fails with `Credential implementation provided to initializeApp() … has insufficient permission` | **not** a credential problem — `run-runtime` has no Identity Platform permissions; §3.1 was skipped |
 | WIF step fails with a policy violation | §5.2 |
 | `PERMISSION_DENIED … iam.serviceAccounts.actAs` during deploy | step 3 of §5.1 (`roles/iam.serviceAccountUser` on `run-runtime`) was skipped |
 | Deploy succeeded but the site shows stale catalog data | the storefront caches ~30s per instance; unrelated to this app's deploy |
