@@ -13,9 +13,8 @@ drop any. When a value can't be found, write `unknown` and say why in
 
 **This skill only reads.** It never closes, comments on, labels, or
 moves an issue or board card, never edits a doc, and never deploys.
-Recording landed work is [update-plan](../update-plan/SKILL.md)'s job;
-correcting the roadmap is [update-roadmap](../update-roadmap/SKILL.md)'s
-(step 7 below).
+Recording work and correcting the roadmap are both
+[update-roadmap](../update-roadmap/SKILL.md)'s job (step 7 below).
 
 The repository is `thedavidhanks/bcc-rentals-admin` and the board is
 [Project #4](https://github.com/users/thedavidhanks/projects/4) (user
@@ -51,7 +50,7 @@ This project has **no GitHub milestones**. The phase is the board's
 `Phase` single-select field, and phase IDs are also the prefix of every
 issue title (`P11.5 — …`), so they stay greppable. The full list of
 board fields and their values is in
-[update-plan's Board reference](../update-plan/SKILL.md#board-reference)
+[update-roadmap's Board reference](../update-roadmap/SKILL.md#board-reference)
 — read it there rather than keeping a second copy here.
 
 ```bash
@@ -175,9 +174,8 @@ is open — note it once, don't flag every issue.
 ## 5. Next issue
 
 This section is the **canonical definition** of what is next.
-[next-task-prompt](../next-task-prompt/SKILL.md) and
-[update-plan](../update-plan/SKILL.md) both defer to the rule below
-rather than restating it.
+[next-task-prompt](../next-task-prompt/SKILL.md) defers to the rule
+below rather than restating it.
 
 An issue is **ready to pick up** when all of these hold:
 

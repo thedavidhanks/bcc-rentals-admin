@@ -227,13 +227,19 @@ installed, so a misfire leaves the working credential in place. `.env.local` is 
 | file a bug, finding, or new task | `create-github-issue` | a GitHub issue |
 | turn an issue into an agent work order | `next-task-prompt` | `docs/prompts/*.md` |
 | ship a finished branch | `open-pull-request` | a PR; calls `update-roadmap` |
-| sync the phase plan with GitHub | `update-roadmap` | `docs/roadmap.md` only |
-| record work that just merged | `update-plan` | the issue, the board, `docs/LOG.md`, the archive |
+| record what a branch does to the plan | `update-roadmap` | `docs/LOG.md`, the archive, `docs/roadmap.md` |
 
-`project-status` is the single definition of "what's next" — `next-task-prompt` and
-`update-plan` defer to its §5 rather than re-deriving it. `update-roadmap` is the only writer
-of `docs/roadmap.md`. `update-plan` is the only writer of `docs/LOG.md` and the archive, and it
-runs **after** a human merge, never before.
+`project-status` is the single definition of "what's next" — `next-task-prompt` defers to its
+§5 rather than re-deriving it. `update-roadmap` is the **only** writer of `docs/LOG.md`,
+the archive in `docs/EXECUTION_PLAN.md`, and `docs/roadmap.md`.
+
+**Everything is recorded before the merge, not after.** `update-roadmap` runs on the branch —
+`open-pull-request` calls it, and a `PreToolUse` hook on `gh pr create` stops a pull request
+that has no docs commit — so the documents merge in the same pull request as the code. The
+`Closes #N` line then closes the issue and flips the board to `Done` on merge. Nothing needs
+doing afterwards. The log entry and archive row are written for every substantive branch; the
+roadmap changes rarely, gated on a phase being added, rescoped, or shipped, and it holds plain
+English intent with **no counts, SHAs, or status**.
 
 ## Storefront reference files (per spec — repo now available, not vendored here)
 

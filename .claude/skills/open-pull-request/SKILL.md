@@ -1,6 +1,6 @@
 ---
 name: open-pull-request
-description: Check a branch before it becomes a pull request to bcc-rentals-admin — no secrets or stray files in the diff, lint/typecheck/tests green, schema and deploy changes flagged as human-only, the roadmap in sync, and a body with a Closes #N line — then open it and explain in plain English what it adds, which issue it closes, and how it moves the roadmap. Use whenever a pull request is about to be opened, or when asked to "open a PR", "send a PR", "create a pull request", or "ship this branch".
+description: Check a branch before it becomes a pull request to bcc-rentals-admin — no secrets or stray files in the diff, lint/typecheck/tests green, schema and deploy changes flagged as human-only, the plan documents (log, archive, roadmap) written on the branch by update-roadmap, and a body with a Closes #N line — then open it and explain in plain English what it adds, which issue it closes, and how it moves the roadmap. Use whenever a pull request is about to be opened, or when asked to "open a PR", "send a PR", "create a pull request", or "ship this branch".
 allowed-tools: Bash(gh *), Bash(git *), Bash(npm run *), Bash(npm test *), Read, Edit, Skill(update-roadmap)
 ---
 
@@ -133,33 +133,40 @@ layout, a form, anything `.tsx` — say so explicitly. `vitest` is
 **no `.tsx` is ever collected**; a green suite is not evidence that a
 screen renders.
 
-## 5. The roadmap
+## 5. The plan documents
 
-Run the [update-roadmap](../update-roadmap/SKILL.md) skill in **branch
-mode**, with this branch as its trigger. It judges
-[docs/roadmap.md](../../../docs/roadmap.md) as if this branch had
-merged, along with any drift already on `master`. If the page needs an
-edit, that skill commits it on this branch, so the edit merges with the
-change it describes, and hands back the mismatches it fixed.
+Run the [update-roadmap](../update-roadmap/SKILL.md) skill, with this
+branch as its trigger. It owns all three plan documents and writes them
+**on this branch**, as one commit, so they merge with the change they
+describe:
 
-**Most branches come back `No change needed (gate: …)` after three
-commands** — its step 2 gate exits early unless the branch touches the
-roadmap, finishes a phase, or changes what "Where the system is today"
+- [docs/LOG.md](../../../docs/LOG.md) — the dated entry: what this
+  branch does, the decisions behind it, how it was verified. Written
+  for every substantive branch.
+- the archive in
+  [docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) — one row
+  per task this branch completes.
+- [docs/roadmap.md](../../../docs/roadmap.md) — judged as if this
+  branch had merged, along with any drift already on `master`.
+
+Don't write any of those three yourself, and don't go read them to
+second-guess what it did; take its report and put it in the body.
+
+**The roadmap part usually comes back `no change needed (gate: …)`
+after three commands** — its gate exits early unless the branch touches
+the page, finishes a phase, or changes what "Where the system is today"
 describes. That one-line answer is the step completing, not the step
 being skipped; put it in the body's **Roadmap** line as "needed no
-change" and move on. Don't re-run it or go read the page yourself to
-second-guess the gate.
+change" and move on. The log entry and archive row are written either
+way.
 
-A phase is complete only when every issue carrying it is closed. Don't
-mark one `(complete)` in this pull request just because it closes the
-phase's last open issue; say in step 7 that the phase completes when
-this merges.
+A phase is complete only when every issue carrying it is closed, and
+that skill counts this branch as merged when it judges that. If this
+pull request closes the phase's last open issue, say so in step 7.
 
-Leave [docs/LOG.md](../../../docs/LOG.md) and the archive in
-[docs/EXECUTION_PLAN.md](../../../docs/EXECUTION_PLAN.md) alone. Those
-are written **after** the merge, by
-[update-plan](../update-plan/SKILL.md), when there is a merge SHA to
-record.
+Nothing is left to do after the merge: the `Closes #N` line closes the
+issue and flips the board to `Done`, and the documents merge with the
+code.
 
 ## 6. The body
 
@@ -255,14 +262,19 @@ words>, or "nothing: the phase completes when this merges". The roadmap
 page itself <was updated in this pull request to say …> / <needed no
 change>.
 
+**Docs in this pull request:** the LOG entry and archive row for
+<plan ID>, plus the roadmap edit above if there was one — all in
+<docs commit SHA>, so nothing needs writing after the merge.
+
 **Checks:** <secret scan, stray files, lint, typecheck, test counts,
 roadmap: one line each, with any fix this skill made.>
 
 **Before merging:** <what a human must do — read the diff; plus any
 schema apply, deploy, or browser check from step 3/4.>
 
-You merge it — `gh pr merge` is denied to agents here. After the merge,
-run `update-plan` to write the LOG entry and the archive row.
+You merge it — `gh pr merge` is denied to agents here. Nothing needs
+recording afterwards: the docs are in the pull request and `Closes #N`
+closes the issue.
 ```
 
 Get "still open in the phase" from GitHub, not from the roadmap:

@@ -173,9 +173,10 @@ Per branch and again on the integration branch:
 4. **Report:** branch name(s), test counts (<N> → ?), the §4 decisions you took, the exact audit
    `action` string(s) used, confirmation that each §3 item has a named test behind it, and
    anything you changed in existing tests (and why).
-5. Do **not** close issue #<N>, change its board status, or edit [docs/LOG.md](../LOG.md) or
-   [docs/roadmap.md](../roadmap.md). Hand the branch back: the `open-pull-request` skill opens
-   the pull request with `Closes #<N>` in its body, a human merges, and `update-plan` records it.
+5. Do **not** close issue #<N>, change its board status, or edit [docs/LOG.md](../LOG.md),
+   [docs/EXECUTION_PLAN.md](../EXECUTION_PLAN.md), or [docs/roadmap.md](../roadmap.md). Hand the
+   branch back: the `open-pull-request` skill calls `update-roadmap` to commit those documents on
+   the branch, then opens the pull request with `Closes #<N>` in its body, and a human merges.
 
 **Do not start <adjacent task IDs>.** <One line on why they're a separate wave.>
 ```
